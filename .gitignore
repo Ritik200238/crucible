@@ -3,3 +3,7 @@ dist/
 .env
 *.log
 .guardrail/
+
+# local agent tooling, not part of the project
+.claude/
+.gstack/
