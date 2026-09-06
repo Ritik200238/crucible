@@ -1,0 +1,29 @@
+{
+  "name": "guardrail",
+  "version": "0.1.0",
+  "description": "A policy firewall for Binance Agent OS. Every order your AI agent proposes is checked against your rules before it can reach Binance.",
+  "type": "module",
+  "bin": {
+    "guardrail": "./dist/cli.js"
+  },
+  "main": "./dist/mcp-server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "cli": "node --experimental-strip-types src/cli.ts",
+    "mcp": "node --experimental-strip-types src/mcp-server.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "license": "MIT"
+}
