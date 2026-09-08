@@ -1,0 +1,23 @@
+# Render blueprint for the hosted, read-only instance.
+#
+# One web service, built from the Dockerfile. It holds no exchange credential,
+# no wallet session and no signing key, so the two tools that could move money
+# are refused twice over: by the operator token, and by having nothing to
+# execute with.
+#
+# `CRUCIBLE_MCP_TOKEN` is marked `sync: false` on purpose — a secret does not
+# belong in a file that lives in a public repository. Render prompts for it
+# once when the blueprint is applied.
+
+services:
+  - type: web
+    name: crucible
+    runtime: docker
+    plan: free
+    region: singapore
+    # Answers without touching a venue, so it measures whether this process is
+    # up rather than whether Binance is.
+    healthCheckPath: /api/policy
+    envVars:
+      - key: CRUCIBLE_MCP_TOKEN
+        sync: false
