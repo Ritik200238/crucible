@@ -7,3 +7,14 @@ dist/
 # local agent tooling, not part of the project
 .claude/
 .gstack/
+
+# competitor code — never enters this repo (licence contamination)
+competitors/
+
+# reference material — read-only, never enters this repo (LGPL)
+reference/
+
+# ledger and its signing key — never committed
+.crucible/
+# sampler process log; the samples themselves are the evidence and are kept
+data/sampler.log
