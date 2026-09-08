@@ -24,7 +24,14 @@ export const SAMPLE_PATH = "data/samples.jsonl";
 
 /** Sizes in USD. Chosen to straddle the point where the venues converge. */
 export const DEFAULT_SIZES = [100, 1_000, 10_000, 100_000];
-export const DEFAULT_SYMBOLS = ["BNBUSDT", "ETHUSDT"];
+/**
+ * Pairs sampled, chosen to span liquidity rather than to flatter the result.
+ *
+ * BNB and ETH have deep pools; BTC has a real but shallower one; XRP's is thin
+ * enough that the exchange wins at every size. A comparison run only on the
+ * pairs where on-chain wins would not be a comparison.
+ */
+export const DEFAULT_SYMBOLS = ["BNBUSDT", "ETHUSDT", "BTCUSDT", "XRPUSDT"];
 export const DEFAULT_INTERVAL_MS = 10 * 60 * 1000;
 
 /** One priced comparison at one instant. */

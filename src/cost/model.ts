@@ -36,8 +36,10 @@ const BPS = 10_000;
  *
  * 1: original three routes.
  * 2: maker route charges measured adverse selection.
+ * 3: every route carries a measured error bar, and the router decides on
+ *    overlap rather than on a fixed margin.
  */
-export const COST_MODEL_VERSION = 2;
+export const COST_MODEL_VERSION = 3;
 
 /** Cost of a route, given the size, expressed against mid. */
 export interface CostInput {

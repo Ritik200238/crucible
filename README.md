@@ -64,16 +64,23 @@ Measured, not asserted. Regenerate any of it with `npm run evidence`.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 12 | 100% | 1.80 bps | 10.07 bps | 8.23 bps |
-| BNBUSDT | $1,000 | 12 | 100% | 1.19 bps | 10.07 bps | 8.88 bps |
-| BNBUSDT | $10,000 | 12 | 100% | 2.08 bps | 10.16 bps | 7.97 bps |
-| BNBUSDT | $100,000 | 12 | 58% | 11.75 bps | 11.64 bps | 0.32 bps |
-| ETHUSDT | $100 | 12 | 100% | 4.07 bps | 10.02 bps | 5.95 bps |
-| ETHUSDT | $1,000 | 12 | 100% | 3.25 bps | 10.02 bps | 6.77 bps |
-| ETHUSDT | $10,000 | 12 | 33% | 12.28 bps | 10.02 bps | -2.26 bps |
-| ETHUSDT | $100,000 | 12 | 0% | 67.77 bps | 10.22 bps | -57.75 bps |
+| BNBUSDT | $100 | 2 | 100% | 1.64 bps | 10.07 bps | 8.43 bps |
+| BNBUSDT | $1,000 | 2 | 100% | 1.57 bps | 10.07 bps | 8.49 bps |
+| BNBUSDT | $10,000 | 2 | 100% | 1.91 bps | 10.76 bps | 8.84 bps |
+| BNBUSDT | $100,000 | 2 | 0% | 14.69 bps | 12.93 bps | -1.76 bps |
+| BTCUSDT | $100 | 2 | 0% | 121.30 bps | 9.89 bps | -111.41 bps |
+| BTCUSDT | $1,000 | 2 | 0% | 56.21 bps | 9.88 bps | -46.32 bps |
+| BTCUSDT | $10,000 | 2 | 0% | 53.59 bps | 9.89 bps | -43.69 bps |
+| BTCUSDT | $100,000 | 2 | 0% | 62.07 bps | 9.82 bps | -52.25 bps |
+| ETHUSDT | $100 | 2 | 100% | 2.88 bps | 9.44 bps | 6.57 bps |
+| ETHUSDT | $1,000 | 2 | 100% | 1.66 bps | 9.43 bps | 7.77 bps |
+| ETHUSDT | $10,000 | 2 | 100% | 6.79 bps | 9.41 bps | 2.62 bps |
+| ETHUSDT | $100,000 | 2 | 0% | 53.53 bps | 9.90 bps | -43.63 bps |
+| XRPUSDT | $100 | 2 | 0% | 75.70 bps | 10.34 bps | -65.36 bps |
+| XRPUSDT | $1,000 | 2 | 0% | 76.49 bps | 10.31 bps | -66.18 bps |
+| XRPUSDT | $10,000 | 2 | 0% | 111.00 bps | 10.33 bps | -100.68 bps |
 
-Measured across 96 samples spanning 1.8 hours. On-chain was cheaper in 74% of them.
+Measured across 30 samples spanning 0.2 hours. On-chain was cheaper in 40% of them.
 <!-- EVIDENCE:END -->
 
 **The cheaper venue changes with size, and the crossover is different for each

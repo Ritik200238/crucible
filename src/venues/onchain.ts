@@ -47,13 +47,20 @@ export interface TokenInfo {
 /**
  * Tokens we can price on-chain, keyed by the Binance base asset.
  *
- * Deliberately small. A token is only listed once its BSC contract has been
- * checked against the address the Agentic Wallet skill itself documents, since
- * routing to a look-alike contract is the one mistake here that costs real money.
+ * Deliberately small, and every entry was verified by asking the chain itself
+ * for the contract's `symbol()` and `decimals()` rather than trusting a list.
+ * Routing to a look-alike contract is the one mistake here that costs real
+ * money, and a wrong decimals figure silently misprices by a factor of a
+ * million.
  */
 export const TOKENS: Record<string, TokenInfo> = {
   BNB: { symbol: "WBNB", address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", decimals: 18 },
   ETH: { symbol: "ETH", address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", decimals: 18 },
+  // Bitcoin on this chain is BTCB, and Binance lists the spot market as BTC.
+  // The map is keyed by the exchange's base asset so a lookup from a symbol
+  // finds the right contract rather than the right-looking name.
+  BTC: { symbol: "BTCB", address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", decimals: 18 },
+  XRP: { symbol: "XRP", address: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", decimals: 18 },
   USDT: { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
   USDC: { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
 };
