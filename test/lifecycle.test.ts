@@ -20,7 +20,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Ledger } from "../src/ledger/chain.ts";
+import { Ledger, ledgerPaths } from "../src/ledger/chain.ts";
 import { deriveState } from "../src/risk/state.ts";
 import { reconcile, ExecutionError } from "../src/exec/execute.ts";
 import { calibration } from "../src/exec/calibration.ts";
@@ -358,5 +358,39 @@ describe("reconciliation closes the unknown with the venue's own answer", () => 
     await assert.rejects(reconcile({ planId: "p1", ledger }), /credentials/);
     // Refusing to look is not an answer: the hold stays.
     assert.equal(deriveState(ledger.read()).unresolved.length, 1);
+  });
+});
+
+describe("where the ledger lives", () => {
+  test("CRUCIBLE_LEDGER_DIR moves it, and is read per call", () => {
+    // A hosted instance needs this: a serverless bundler will not carry a
+    // dot-directory, so the deployed copy sits somewhere ordinary.
+    const saved = process.env.CRUCIBLE_LEDGER_DIR;
+    try {
+      delete process.env.CRUCIBLE_LEDGER_DIR;
+      assert.match(ledgerPaths().dir, /\.crucible$/);
+
+      process.env.CRUCIBLE_LEDGER_DIR = "deploy/ledger";
+      assert.match(ledgerPaths().dir.replace(/\\/g, "/"), /deploy\/ledger$/);
+      assert.match(ledgerPaths().ledger.replace(/\\/g, "/"), /deploy\/ledger\/ledger\.jsonl$/);
+
+      // A blank value is not a directory.
+      process.env.CRUCIBLE_LEDGER_DIR = "   ";
+      assert.match(ledgerPaths().dir, /\.crucible$/);
+    } finally {
+      if (saved === undefined) delete process.env.CRUCIBLE_LEDGER_DIR;
+      else process.env.CRUCIBLE_LEDGER_DIR = saved;
+    }
+  });
+
+  test("an explicit directory still wins over the variable", () => {
+    const saved = process.env.CRUCIBLE_LEDGER_DIR;
+    try {
+      process.env.CRUCIBLE_LEDGER_DIR = "deploy/ledger";
+      assert.match(ledgerPaths("somewhere/else").dir.replace(/\\/g, "/"), /somewhere\/else$/);
+    } finally {
+      if (saved === undefined) delete process.env.CRUCIBLE_LEDGER_DIR;
+      else process.env.CRUCIBLE_LEDGER_DIR = saved;
+    }
   });
 });

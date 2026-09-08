@@ -59,6 +59,18 @@ export const GENESIS_HASH = "0".repeat(64);
 
 export const DEFAULT_LEDGER_DIR = ".crucible";
 
+/**
+ * Where the ledger lives.
+ *
+ * `CRUCIBLE_LEDGER_DIR` overrides the default, which a hosted instance needs:
+ * a serverless bundler will not carry a dot-directory, so the deployed copy
+ * sits somewhere ordinary and this points at it. Read on every call rather
+ * than captured at import, so a test can move it.
+ */
+export function defaultLedgerDir(): string {
+  return process.env.CRUCIBLE_LEDGER_DIR?.trim() || DEFAULT_LEDGER_DIR;
+}
+
 export interface LedgerPaths {
   dir: string;
   ledger: string;
@@ -68,7 +80,7 @@ export interface LedgerPaths {
 }
 
 /** Where the files live, so a verifier can find them without opening a Ledger. */
-export function ledgerPaths(dir: string = DEFAULT_LEDGER_DIR): LedgerPaths {
+export function ledgerPaths(dir: string = defaultLedgerDir()): LedgerPaths {
   const base = resolve(dir);
   return {
     dir: base,
@@ -452,7 +464,7 @@ export class Ledger {
   private key: LedgerKeyFile | null = null;
 
   constructor(opts: LedgerOptions = {}) {
-    this.paths = ledgerPaths(opts.dir ?? DEFAULT_LEDGER_DIR);
+    this.paths = ledgerPaths(opts.dir ?? defaultLedgerDir());
   }
 
   /** Base64 SPKI of the signing key, for anyone verifying this ledger. */

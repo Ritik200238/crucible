@@ -352,7 +352,7 @@ function messageFor(err: unknown): string {
   return message === "" ? "The request failed without reporting a reason." : message;
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+export async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Only the path and query are used; the authority is a placeholder that
   // exists because URL needs a base for a relative request target.
   const url = new URL(req.url ?? "/", "http://dashboard.invalid");

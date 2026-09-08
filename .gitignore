@@ -22,3 +22,4 @@ crucible.config.json
 
 # A signing key must never be built into an image.
 deploy/ledger/ledger-key.json
+dist/
