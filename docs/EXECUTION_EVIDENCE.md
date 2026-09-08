@@ -26,9 +26,9 @@ snapshot, so the two venues land on one comparable axis. A basis point is 0.01%.
 
 ## The sample
 
-- **30 priced comparisons** over **11 minutes**
-- From `2026-09-08T16:56:30.755Z` to `2026-09-08T17:07:08.451Z`
-- 282 rows on disk
+- **60 priced comparisons** over **26 minutes**
+- From `2026-09-08T16:56:30.755Z` to `2026-09-08T17:22:07.309Z`
+- 314 rows on disk
 - 250 earlier rows excluded: they were priced under an older cost model, and averaging two models together would describe neither
 - Cost model version 3
 
@@ -38,28 +38,28 @@ snapshot, so the two venues land on one comparable axis. A basis point is 0.01%.
 
 ## What it shows
 
-**On-chain was cheaper in 40% of 30 samples**, with a median
+**On-chain was cheaper in 38% of 60 samples**, with a median
 edge of **-41.66 bps**.
 
-BNBUSDT: on-chain is cheaper to about $10,000, and Binance takes over by $100,000. BTCUSDT: Binance was cheaper at every size sampled. ETHUSDT: on-chain is cheaper to about $10,000, and Binance takes over by $100,000. XRPUSDT: Binance was cheaper at every size sampled.
+BNBUSDT: on-chain is cheaper to about $10,000, and Binance takes over by $100,000. BTCUSDT: Binance was cheaper at every size sampled. ETHUSDT: on-chain is cheaper to about $1,000, and Binance takes over by $10,000. XRPUSDT: Binance was cheaper at every size sampled.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 2 | 100% | 1.64 bps | 10.07 bps | 8.43 bps |
-| BNBUSDT | $1,000 | 2 | 100% | 1.57 bps | 10.07 bps | 8.49 bps |
-| BNBUSDT | $10,000 | 2 | 100% | 1.91 bps | 10.76 bps | 8.84 bps |
-| BNBUSDT | $100,000 | 2 | 0% | 14.69 bps | 12.93 bps | -1.76 bps |
-| BTCUSDT | $100 | 2 | 0% | 121.30 bps | 9.89 bps | -111.41 bps |
-| BTCUSDT | $1,000 | 2 | 0% | 56.21 bps | 9.88 bps | -46.32 bps |
-| BTCUSDT | $10,000 | 2 | 0% | 53.59 bps | 9.89 bps | -43.69 bps |
-| BTCUSDT | $100,000 | 2 | 0% | 62.07 bps | 9.82 bps | -52.25 bps |
-| ETHUSDT | $100 | 2 | 100% | 2.88 bps | 9.44 bps | 6.57 bps |
-| ETHUSDT | $1,000 | 2 | 100% | 1.66 bps | 9.43 bps | 7.77 bps |
-| ETHUSDT | $10,000 | 2 | 100% | 6.79 bps | 9.41 bps | 2.62 bps |
-| ETHUSDT | $100,000 | 2 | 0% | 53.53 bps | 9.90 bps | -43.63 bps |
-| XRPUSDT | $100 | 2 | 0% | 75.70 bps | 10.34 bps | -65.36 bps |
-| XRPUSDT | $1,000 | 2 | 0% | 76.49 bps | 10.31 bps | -66.18 bps |
-| XRPUSDT | $10,000 | 2 | 0% | 111.00 bps | 10.33 bps | -100.68 bps |
+| BNBUSDT | $100 | 4 | 100% | 1.64 bps | 10.07 bps | 8.43 bps |
+| BNBUSDT | $1,000 | 4 | 100% | 1.69 bps | 10.07 bps | 8.37 bps |
+| BNBUSDT | $10,000 | 4 | 100% | 2.12 bps | 10.25 bps | 7.95 bps |
+| BNBUSDT | $100,000 | 4 | 25% | 14.07 bps | 12.28 bps | -1.75 bps |
+| BTCUSDT | $100 | 4 | 0% | 85.59 bps | 10.00 bps | -75.59 bps |
+| BTCUSDT | $1,000 | 4 | 0% | 53.04 bps | 10.00 bps | -43.11 bps |
+| BTCUSDT | $10,000 | 4 | 0% | 55.64 bps | 10.00 bps | -45.64 bps |
+| BTCUSDT | $100,000 | 4 | 0% | 64.16 bps | 10.00 bps | -53.80 bps |
+| ETHUSDT | $100 | 4 | 100% | 2.73 bps | 9.76 bps | 6.97 bps |
+| ETHUSDT | $1,000 | 4 | 100% | 2.21 bps | 9.76 bps | 7.55 bps |
+| ETHUSDT | $10,000 | 4 | 50% | 10.87 bps | 9.72 bps | -1.15 bps |
+| ETHUSDT | $100,000 | 4 | 0% | 57.71 bps | 10.10 bps | -47.80 bps |
+| XRPUSDT | $100 | 4 | 0% | 82.87 bps | 10.34 bps | -72.54 bps |
+| XRPUSDT | $1,000 | 4 | 0% | 83.00 bps | 10.31 bps | -72.69 bps |
+| XRPUSDT | $10,000 | 4 | 0% | 114.84 bps | 10.33 bps | -104.53 bps |
 
 The edge is the better of the two Binance routes minus the on-chain route, so a
 positive number means on-chain won.
@@ -68,21 +68,21 @@ positive number means on-chain won.
 
 | Pair | Order size | pool fee | venue divergence | price impact | gas | wallet service fee |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 1.000 | 0.145 | -0.084 | 0.576 | 0.000 |
-| BNBUSDT | $1,000 | 1.000 | 0.320 | 0.196 | 0.058 | 0.000 |
-| BNBUSDT | $10,000 | 1.000 | -0.344 | 1.248 | 0.011 | 0.000 |
-| BNBUSDT | $100,000 | 1.000 | -0.401 | 14.086 | 0.003 | 0.000 |
-| BTCUSDT | $100 | 1.000 | -1.080 | 0.258 | 71.124 | 50.000 |
-| BTCUSDT | $1,000 | 3.000 | -4.830 | 1.389 | 6.647 | 50.000 |
-| BTCUSDT | $10,000 | 5.000 | -3.203 | 1.028 | 0.763 | 50.000 |
-| BTCUSDT | $100,000 | 5.000 | -3.269 | 10.254 | 0.088 | 50.000 |
-| ETHUSDT | $100 | 3.000 | -2.493 | 0.135 | 2.236 | 0.000 |
-| ETHUSDT | $1,000 | 5.000 | -3.824 | 0.252 | 0.231 | 0.000 |
-| ETHUSDT | $10,000 | 5.000 | -4.110 | 5.878 | 0.027 | 0.000 |
-| ETHUSDT | $100,000 | 5.000 | -4.110 | 52.637 | 0.007 | 0.000 |
-| XRPUSDT | $100 | 25.000 | 0.375 | 0.324 | 0.001 | 50.000 |
-| XRPUSDT | $1,000 | 25.000 | -2.073 | 3.562 | 0.000 | 50.000 |
-| XRPUSDT | $10,000 | 25.000 | -0.678 | 36.681 | 0.000 | 50.000 |
+| BNBUSDT | $100 | 1.000 | 0.145 | 0.009 | 0.576 | 0.000 |
+| BNBUSDT | $1,000 | 1.000 | 0.412 | 0.102 | 0.058 | 0.000 |
+| BNBUSDT | $10,000 | 1.000 | 0.086 | 1.050 | 0.009 | 0.000 |
+| BNBUSDT | $100,000 | 1.000 | -0.219 | 12.214 | 0.003 | 0.000 |
+| BTCUSDT | $100 | 1.000 | -0.696 | 0.243 | 35.015 | 50.000 |
+| BTCUSDT | $1,000 | 1.000 | -1.099 | 2.676 | 3.044 | 50.000 |
+| BTCUSDT | $10,000 | 5.000 | -0.847 | 1.039 | 0.322 | 50.000 |
+| BTCUSDT | $100,000 | 5.000 | -1.228 | 10.335 | 0.037 | 50.000 |
+| ETHUSDT | $100 | 1.000 | -0.170 | 0.225 | 1.427 | 0.000 |
+| ETHUSDT | $1,000 | 3.000 | -1.768 | 1.072 | 0.150 | 0.000 |
+| ETHUSDT | $10,000 | 5.000 | -0.890 | 6.741 | 0.018 | 0.000 |
+| ETHUSDT | $100,000 | 5.000 | -1.752 | 54.460 | 0.004 | 0.000 |
+| XRPUSDT | $100 | 25.000 | 7.201 | 0.324 | 0.346 | 50.000 |
+| XRPUSDT | $1,000 | 25.000 | 4.403 | 3.562 | 0.035 | 50.000 |
+| XRPUSDT | $10,000 | 25.000 | 3.355 | 36.479 | 0.004 | 50.000 |
 
 All values in basis points. Impact is the only component that grows with size,
 which is why the cheaper venue changes as the order gets bigger: the Binance

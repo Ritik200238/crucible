@@ -64,23 +64,23 @@ Measured, not asserted. Regenerate any of it with `npm run evidence`.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 2 | 100% | 1.64 bps | 10.07 bps | 8.43 bps |
-| BNBUSDT | $1,000 | 2 | 100% | 1.57 bps | 10.07 bps | 8.49 bps |
-| BNBUSDT | $10,000 | 2 | 100% | 1.91 bps | 10.76 bps | 8.84 bps |
-| BNBUSDT | $100,000 | 2 | 0% | 14.69 bps | 12.93 bps | -1.76 bps |
-| BTCUSDT | $100 | 2 | 0% | 121.30 bps | 9.89 bps | -111.41 bps |
-| BTCUSDT | $1,000 | 2 | 0% | 56.21 bps | 9.88 bps | -46.32 bps |
-| BTCUSDT | $10,000 | 2 | 0% | 53.59 bps | 9.89 bps | -43.69 bps |
-| BTCUSDT | $100,000 | 2 | 0% | 62.07 bps | 9.82 bps | -52.25 bps |
-| ETHUSDT | $100 | 2 | 100% | 2.88 bps | 9.44 bps | 6.57 bps |
-| ETHUSDT | $1,000 | 2 | 100% | 1.66 bps | 9.43 bps | 7.77 bps |
-| ETHUSDT | $10,000 | 2 | 100% | 6.79 bps | 9.41 bps | 2.62 bps |
-| ETHUSDT | $100,000 | 2 | 0% | 53.53 bps | 9.90 bps | -43.63 bps |
-| XRPUSDT | $100 | 2 | 0% | 75.70 bps | 10.34 bps | -65.36 bps |
-| XRPUSDT | $1,000 | 2 | 0% | 76.49 bps | 10.31 bps | -66.18 bps |
-| XRPUSDT | $10,000 | 2 | 0% | 111.00 bps | 10.33 bps | -100.68 bps |
+| BNBUSDT | $100 | 4 | 100% | 1.64 bps | 10.07 bps | 8.43 bps |
+| BNBUSDT | $1,000 | 4 | 100% | 1.69 bps | 10.07 bps | 8.37 bps |
+| BNBUSDT | $10,000 | 4 | 100% | 2.12 bps | 10.25 bps | 7.95 bps |
+| BNBUSDT | $100,000 | 4 | 25% | 14.07 bps | 12.28 bps | -1.75 bps |
+| BTCUSDT | $100 | 4 | 0% | 85.59 bps | 10.00 bps | -75.59 bps |
+| BTCUSDT | $1,000 | 4 | 0% | 53.04 bps | 10.00 bps | -43.11 bps |
+| BTCUSDT | $10,000 | 4 | 0% | 55.64 bps | 10.00 bps | -45.64 bps |
+| BTCUSDT | $100,000 | 4 | 0% | 64.16 bps | 10.00 bps | -53.80 bps |
+| ETHUSDT | $100 | 4 | 100% | 2.73 bps | 9.76 bps | 6.97 bps |
+| ETHUSDT | $1,000 | 4 | 100% | 2.21 bps | 9.76 bps | 7.55 bps |
+| ETHUSDT | $10,000 | 4 | 50% | 10.87 bps | 9.72 bps | -1.15 bps |
+| ETHUSDT | $100,000 | 4 | 0% | 57.71 bps | 10.10 bps | -47.80 bps |
+| XRPUSDT | $100 | 4 | 0% | 82.87 bps | 10.34 bps | -72.54 bps |
+| XRPUSDT | $1,000 | 4 | 0% | 83.00 bps | 10.31 bps | -72.69 bps |
+| XRPUSDT | $10,000 | 4 | 0% | 114.84 bps | 10.33 bps | -104.53 bps |
 
-Measured across 30 samples spanning 0.2 hours. On-chain was cheaper in 40% of them.
+Measured across 60 samples spanning 0.4 hours. On-chain was cheaper in 38% of them.
 <!-- EVIDENCE:END -->
 
 **The cheaper venue changes with size, and the crossover is different for each
