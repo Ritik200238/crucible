@@ -462,7 +462,7 @@ describe("a venue price too good to be true", () => {
         windowSec: 60,
         adverseBuyBps: 0.6,
         adverseSellBps: 0.5,
-        adverseSamples: 400,
+        adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8,
       },
       onchain: {
         chainId: 56,

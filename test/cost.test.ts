@@ -147,7 +147,7 @@ function makeSnapshot(over: Partial<Snapshot> = {}): Snapshot {
       minNotional: 5,
     },
     commission: { maker: 0.001, taker: 0.001, source: "vip0-default" },
-    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 },
+    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 },
     onchain: null,
     hash: "1f0a7c4b2e9d6538",
     ...over,
@@ -255,7 +255,7 @@ test("costBinanceTaker moves the effective price against the side being traded",
 test("fillProbability falls as the order grows", () => {
   // 0.4 BNB/s of sellers over the 60s horizon is 24 BNB of flow, against a
   // queue of 5 plus the order itself.
-  const snapshot = makeSnapshot({ flow: { hitsBidPerSec: 0.4, liftsAskPerSec: 0.4, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } });
+  const snapshot = makeSnapshot({ flow: { hitsBidPerSec: 0.4, liftsAskPerSec: 0.4, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } });
   const sizes = [4, 8, 16, 32, 64];
 
   const ps = sizes.map((q) => fillProbability(snapshot, "BUY", q));
@@ -270,19 +270,19 @@ test("fillProbability falls as the order grows", () => {
 });
 
 test("fillProbability is zero when nothing is arriving on that side", () => {
-  const oneSided = makeSnapshot({ flow: { hitsBidPerSec: 0, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } });
+  const oneSided = makeSnapshot({ flow: { hitsBidPerSec: 0, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } });
 
   assert.equal(fillProbability(oneSided, "BUY", 5), 0);
   assert.ok(fillProbability(oneSided, "SELL", 5) > 0, "the other side is still trading");
 
-  const dead = makeSnapshot({ flow: { hitsBidPerSec: 0, liftsAskPerSec: 0, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } });
+  const dead = makeSnapshot({ flow: { hitsBidPerSec: 0, liftsAskPerSec: 0, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } });
   assert.equal(fillProbability(dead, "SELL", 5), 0);
 });
 
 test("fillProbability reads hits into the bid for a BUY and lifts of the ask for a SELL", () => {
   // Both sides of the book hold 5 BNB at the touch, so the only thing that can
   // separate these two numbers is which flow rate was used.
-  const snapshot = makeSnapshot({ flow: { hitsBidPerSec: 0.2, liftsAskPerSec: 0.6, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } });
+  const snapshot = makeSnapshot({ flow: { hitsBidPerSec: 0.2, liftsAskPerSec: 0.6, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } });
 
   const buy = fillProbability(snapshot, "BUY", 10);
   const sell = fillProbability(snapshot, "SELL", 10);
@@ -296,7 +296,7 @@ test("fillProbability never claims better than a 95% chance", () => {
   // 180 BNB of flow against a queue of 6 is certainty as far as the maths goes.
   assert.equal(fillProbability(makeSnapshot(), "BUY", 1), 0.95);
 
-  const torrent = makeSnapshot({ flow: { hitsBidPerSec: 500, liftsAskPerSec: 500, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } });
+  const torrent = makeSnapshot({ flow: { hitsBidPerSec: 500, liftsAskPerSec: 500, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } });
   assert.equal(fillProbability(torrent, "BUY", 40), 0.95);
 });
 
@@ -324,7 +324,7 @@ test("costBinanceMaker is marked as estimated in every component", () => {
 });
 
 test("costBinanceMaker weights the post against the cost of missing it", () => {
-  const snapshot = makeSnapshot({ flow: { hitsBidPerSec: 0.4, liftsAskPerSec: 0.4, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } });
+  const snapshot = makeSnapshot({ flow: { hitsBidPerSec: 0.4, liftsAskPerSec: 0.4, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } });
   const input = { snapshot, side: "BUY" as const, baseQty: 12 };
 
   const p = fillProbability(snapshot, "BUY", 12);
@@ -356,7 +356,7 @@ test("adverse selection is charged on the side that would actually rest", () => 
       windowSec: 60,
       adverseBuyBps: 2,
       adverseSellBps: 0.25,
-      adverseSamples: 400,
+      adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8,
     },
   });
   const buy = costBinanceMaker({ snapshot, side: "BUY", baseQty: 1 });
@@ -379,7 +379,7 @@ test("a measured pick-off can make posting cost more than crossing", () => {
       windowSec: 60,
       adverseBuyBps: 3,
       adverseSellBps: 3,
-      adverseSamples: 400,
+      adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8,
     },
   });
   const input = { snapshot, side: "BUY" as const, baseQty: 1 };

@@ -124,7 +124,7 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
       minNotional: 5,
     },
     commission: { maker: 0.001, taker: 0.001, source: "vip0-default" },
-    flow: { hitsBidPerSec: 1.4, liftsAskPerSec: 1.6, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 },
+    flow: { hitsBidPerSec: 1.4, liftsAskPerSec: 1.6, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 },
     onchain: null,
     hash: "0".repeat(64),
     ...over,

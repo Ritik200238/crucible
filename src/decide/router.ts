@@ -188,13 +188,25 @@ export function route(opts: RouteOptions): Plan {
   const ranked = [...usable].sort((a, b) => a.totalBps - b.totalBps);
   let chosen = ranked[0]!;
 
-  // The estimated-route handicap. One basis point is the scale of the thing
-  // being estimated, so that is the margin an estimate has to win by.
-  const ESTIMATE_MARGIN_BPS = 1;
-  if (chosen.hasEstimates) {
-    const measured = ranked.find((r) => !r.hasEstimates);
-    if (measured && measured.totalBps - chosen.totalBps < ESTIMATE_MARGIN_BPS) {
-      chosen = measured;
+  // Cheapest wins only when it is cheaper by more than the two estimates could
+  // disagree by. Each route carries a measured error bar, so the threshold is
+  // derived from this market at this moment rather than being a constant
+  // somebody picked.
+  //
+  // When the gap is inside one combined standard deviation the two routes are
+  // not distinguishable, and the tie goes to whichever is known more precisely.
+  // That is what stops a wide guess with a flattering midpoint from beating a
+  // firm number it cannot actually be shown to beat.
+  const runnerUpForTie = ranked[1];
+  if (runnerUpForTie) {
+    const combined = Math.hypot(chosen.uncertaintyBps, runnerUpForTie.uncertaintyBps);
+    const gap = runnerUpForTie.totalBps - chosen.totalBps;
+    if (
+      Number.isFinite(combined) &&
+      gap < combined &&
+      runnerUpForTie.uncertaintyBps < chosen.uncertaintyBps
+    ) {
+      chosen = runnerUpForTie;
     }
   }
 
@@ -259,7 +271,9 @@ function explain(
     parts.push(
       savingBps > 0.01
         ? `${venue} at ${chosen.totalBps.toFixed(2)} bps beats ${other}${otherStyle} at ${runnerUp.totalBps.toFixed(2)} bps, a saving of ${savingBps.toFixed(2)} bps.`
-        : `${venue} and ${other}${otherStyle} are within ${Math.abs(savingBps).toFixed(2)} bps of each other; ${venue} is taken on measured rather than modelled cost.`,
+        : `${venue} at ${chosen.totalBps.toFixed(2)} ± ${chosen.uncertaintyBps.toFixed(2)} and ${other}${otherStyle} at ` +
+          `${runnerUp.totalBps.toFixed(2)} ± ${runnerUp.uncertaintyBps.toFixed(2)} bps overlap, so neither is ` +
+          `demonstrably cheaper. ${venue} is taken because its cost is the one known more precisely.`,
     );
   } else {
     parts.push(`${venue} at ${chosen.totalBps.toFixed(2)} bps is the only route available.`);

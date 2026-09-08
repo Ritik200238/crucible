@@ -114,7 +114,7 @@ function makeSnapshot(over: Partial<Snapshot> = {}): Snapshot {
     // Read from the account, so the Binance taker route carries no modelled
     // component and the estimate handicap can be tested deliberately.
     commission: { maker: 0.001, taker: 0.001, source: "account" },
-    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 },
+    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 },
     onchain: null,
     hash: "1f0a7c4b2e9d6538",
     ...over,
@@ -332,21 +332,47 @@ test("route keeps a measured route over an estimated one that barely beats it", 
       windowSec: 60,
       adverseBuyBps: 0,
       adverseSellBps: 0,
-      adverseSamples: 400,
+      adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8,
     },
   });
   const plan = route({ intent: buy(), snapshot: noPickOff, policy: policy() });
   const rejected = plan.alternatives[0]!;
 
   assert.equal(plan.chosen.style, "TAKER");
-  assert.equal(plan.chosen.hasEstimates, false);
   assert.equal(rejected.style, "MAKER");
   assert.ok(rejected.totalBps < plan.chosen.totalBps, "the rejected route really was cheaper");
-  assert.ok(plan.chosen.totalBps - rejected.totalBps < 1, "and it lost by less than a basis point");
+
+  // The threshold is no longer a constant. The two routes are kept because
+  // their error bars overlap, and the tie goes to whichever is known more
+  // precisely — which is the point being tested.
+  const combined = Math.hypot(plan.chosen.uncertaintyBps, rejected.uncertaintyBps);
+  assert.ok(
+    plan.chosen.totalBps - rejected.totalBps < combined,
+    "the gap has to sit inside the combined uncertainty for the tie-break to apply",
+  );
+  assert.ok(
+    plan.chosen.uncertaintyBps < rejected.uncertaintyBps,
+    "and the route taken must be the one known more precisely",
+  );
 
   // The plan records what that cost, rather than reporting a saving it did not make.
   assert.ok(plan.savingBps < 0);
-  assert.match(plan.rationale, /taken on measured rather than modelled cost/);
+  assert.match(plan.rationale, /known more precisely/);
+});
+
+test("a wide estimate does not beat a firm number it cannot be shown to beat", () => {
+  // The failure this replaced a magic constant to prevent: a route whose
+  // midpoint is lower but whose range swallows the difference is not cheaper,
+  // it is unmeasured.
+  const plan = route({ intent: buy(), snapshot: makeSnapshot(), policy: policy() });
+  const maker = [plan.chosen, ...plan.alternatives].find((r) => r.style === "MAKER");
+  const taker = [plan.chosen, ...plan.alternatives].find((r) => r.style === "TAKER");
+
+  assert.ok(maker && taker);
+  assert.ok(
+    maker!.uncertaintyBps > taker!.uncertaintyBps,
+    "posting rests for a minute and may not fill, so it is the less certain route",
+  );
 });
 
 test("route takes the estimated route when it wins by more than a basis point", () => {

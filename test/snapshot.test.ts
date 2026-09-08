@@ -79,7 +79,7 @@ function makeSnapshot(over: Partial<Omit<Snapshot, "hash">> = {}): Omit<Snapshot
       minNotional: 5,
     },
     commission: { maker: 0.001, taker: 0.001, source: "vip0-default" },
-    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 },
+    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 },
     onchain: null,
     ...over,
   };
@@ -275,9 +275,9 @@ test("hashSnapshot changes when any hashed input changes", () => {
       "where the commission came from",
       makeSnapshot({ commission: { maker: 0.001, taker: 0.001, source: "account" } }),
     ],
-    ["hitsBidPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3.5, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } })],
-    ["liftsAskPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3.5, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } })],
-    ["the flow window", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 61, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } })],
+    ["hitsBidPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3.5, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } })],
+    ["liftsAskPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3.5, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } })],
+    ["the flow window", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 61, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8 } })],
     ["an on-chain quote appearing", makeSnapshot({ onchain: makeOnchain() })],
   ];
 
@@ -338,7 +338,7 @@ test("hashSnapshot does not depend on the order the keys were written in", () =>
   const shuffled: Omit<Snapshot, "hash"> = {
     onchain: null,
     flow: {
-      adverseSamples: 400,
+      adverseSamples: 400, volExchangeBps: 1.5, volSettlementBps: 1.8,
       adverseSellBps: 0.5,
       adverseBuyBps: 0.6,
       windowSec: 60,

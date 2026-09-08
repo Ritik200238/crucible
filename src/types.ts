@@ -140,6 +140,15 @@ export interface TradeFlow {
   adverseSellBps: number;
   /** Fills the adverse-selection figures were averaged over. */
   adverseSamples: number;
+  /**
+   * How far the price typically moves before an order reaches the exchange,
+   * and before a swap settles on-chain. Both in basis points, measured.
+   *
+   * These are the error bars on a cost estimate. A quote is made at one instant
+   * and filled at another, and this is how much the market moves in between.
+   */
+  volExchangeBps: number;
+  volSettlementBps: number;
 }
 
 /**
@@ -193,6 +202,16 @@ export interface CostEstimate {
   unavailable?: string;
   /** True when any component is modelled. */
   hasEstimates: boolean;
+  /**
+   * One standard deviation on this cost, in basis points.
+   *
+   * Not every route is knowable to the same precision. Crossing the spread is
+   * measured against a book that is there right now; posting is a coin toss
+   * between two very different outcomes; a swap settles minutes of market
+   * movement later. Comparing their central estimates alone treats a firm
+   * number and a wide guess as the same kind of claim.
+   */
+  uncertaintyBps: number;
   /**
    * Real risks of this route that carry no expected cost, so they are named
    * rather than priced.

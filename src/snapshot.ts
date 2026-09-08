@@ -15,7 +15,10 @@
 import { createHash } from "node:crypto";
 import {
   adverseSelection,
+  EXCHANGE_LATENCY_MS,
   fetchAggTrades,
+  priceVolatilityBps,
+  SETTLEMENT_MS,
   fetchBookTicker,
   fetchOrderBook,
   fetchSymbolFilters,
@@ -90,6 +93,8 @@ export function hashSnapshot(s: Omit<Snapshot, "hash">): string {
       Number(s.flow.adverseBuyBps.toFixed(6)),
       Number(s.flow.adverseSellBps.toFixed(6)),
       s.flow.adverseSamples,
+      Number(s.flow.volExchangeBps.toFixed(6)),
+      Number(s.flow.volSettlementBps.toFixed(6)),
       s.onchain
         ? [
             s.onchain.amountIn,
@@ -125,6 +130,8 @@ export async function takeSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
     adverseBuyBps: adverse.restingBuyBps,
     adverseSellBps: adverse.restingSellBps,
     adverseSamples: adverse.samples,
+    volExchangeBps: priceVolatilityBps(trades, EXCHANGE_LATENCY_MS),
+    volSettlementBps: priceVolatilityBps(trades, SETTLEMENT_MS),
   };
 
   assertUsableBook(book, symbol);

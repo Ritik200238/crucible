@@ -14,6 +14,7 @@
 
 import { walkBook, queueAhead } from "../snapshot.ts";
 import { feeTierBps, walletServiceFeeRate } from "../venues/onchain.ts";
+import { SETTLEMENT_MS } from "../venues/binance.ts";
 import type {
   CostComponent,
   CostEstimate,
@@ -66,6 +67,7 @@ function finish(
   components: CostComponent[],
   input: CostInput,
   notes: string[] = [],
+  uncertaintyBps = 0,
 ): CostEstimate {
   const totalBps = sum(components);
   const notionalUsd = input.baseQty * input.snapshot.mid;
@@ -81,6 +83,7 @@ function finish(
     effectivePrice: input.snapshot.mid * (1 + (direction * totalBps) / BPS),
     hasEstimates: components.some((c) => c.estimated),
     notes,
+    uncertaintyBps,
   };
 }
 
@@ -95,6 +98,7 @@ function unavailable(venue: Venue, style: Style, reason: string): CostEstimate {
     unavailable: reason,
     hasEstimates: false,
     notes: [],
+    uncertaintyBps: Infinity,
   };
 }
 
@@ -151,7 +155,7 @@ export function costBinanceTaker(input: CostInput): CostEstimate {
     },
   ];
 
-  return finish("BINANCE_SPOT", "TAKER", components, input);
+  return finish("BINANCE_SPOT", "TAKER", components, input, [], s.flow.volExchangeBps);
 }
 
 /** How long a resting order is given to fill before the estimate gives up on it. */
@@ -254,10 +258,41 @@ export function costBinanceMaker(input: CostInput): CostEstimate {
     },
   ];
 
-  return finish("BINANCE_SPOT", "MAKER", components, input, [
-    "The order may not fill at all. The cost above already weighs that, but the outcome is a coin " +
-      "toss on this book rather than a price you are quoted.",
-  ]);
+  // The maker cost is not a number with noise around it: it is one of two very
+  // different outcomes. Either it fills, at the fee less the spread plus the
+  // pick-off, or it does not and crosses later at the taker cost. The spread of
+  // a two-point distribution is exact, so this error bar is derived rather than
+  // assumed — and it is wide, which is the honest description of a coin toss.
+  const costIfFilled = s.commission.maker * BPS + spreadCreditBps + adverseBps;
+  const costIfNot = takerFallback.totalBps;
+  const outcomeSpread = Math.sqrt(p * (1 - p)) * Math.abs(costIfFilled - costIfNot);
+
+  // A resting order is also exposed to the market for as long as it rests,
+  // which is far longer than the moment a crossing order is exposed for.
+  // Leaving that out made posting look like the most precisely known route on
+  // the board, when it is the least.
+  //
+  // Volatility is measured over a short horizon, where there are many samples,
+  // and scaled by the square root of time. That is how a random walk grows, and
+  // the measurement above confirms the tape behaves like one.
+  const restingScale = Math.sqrt((FILL_HORIZON_SEC * 1000) / SETTLEMENT_MS);
+  const priceExposure = s.flow.volSettlementBps * restingScale;
+
+  // Two independent sources of error, so they add in quadrature rather than
+  // linearly.
+  const uncertainty = Math.hypot(outcomeSpread, priceExposure);
+
+  return finish(
+    "BINANCE_SPOT",
+    "MAKER",
+    components,
+    input,
+    [
+      "The order may not fill at all. The cost above already weighs that, but the outcome is a coin " +
+        "toss on this book rather than a price you are quoted.",
+    ],
+    uncertainty,
+  );
 }
 
 /**
@@ -384,7 +419,7 @@ export function costOnchain(input: CostInput): CostEstimate {
       ? "Priced against both the pool directly and the wallet's own executable quote, which agreed."
       : "Priced from the pool directly. The wallet's own executable quote was not available to " +
         "cross-check, so there is only one source for this price.",
-  ]);
+  ], s.flow.volSettlementBps);
 }
 
 /** Every route, priced. Unavailable routes are kept, with their reason. */

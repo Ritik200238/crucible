@@ -402,3 +402,45 @@ export function adverseSelection(trades: AggTrade[], horizonMs = 5000): AdverseS
     horizonMs,
   };
 }
+
+
+/**
+ * How far the price typically moves over a given horizon, in basis points.
+ *
+ * This is the honest source for how wrong a cost estimate can be. A quote is
+ * made at one instant and filled at another, and everything in between is the
+ * market moving. Measuring that from the tape gives an error bar derived from
+ * this market at this moment, rather than a constant somebody chose.
+ *
+ * Returns the standard deviation of price change across every pair of trades
+ * separated by roughly `horizonMs`. It grows with the horizon, which is what a
+ * price doing a random walk should do, and is a useful check that the figure is
+ * measuring what it claims to.
+ */
+export function priceVolatilityBps(trades: AggTrade[], horizonMs: number): number {
+  if (trades.length < 20) return 0;
+  const sorted = [...trades].sort((a, b) => a.time - b.time);
+
+  const moves: number[] = [];
+  let ahead = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    // Walk a second pointer forward to the first trade at least a horizon later.
+    if (ahead < i) ahead = i;
+    while (ahead < sorted.length && sorted[ahead]!.time < sorted[i]!.time + horizonMs) ahead++;
+    if (ahead >= sorted.length) break;
+
+    const from = sorted[i]!.price;
+    if (!(from > 0)) continue;
+    moves.push(((sorted[ahead]!.price - from) / from) * 10_000);
+  }
+  if (moves.length < 10) return 0;
+
+  const mean = moves.reduce((a, b) => a + b, 0) / moves.length;
+  const variance = moves.reduce((a, m) => a + (m - mean) ** 2, 0) / (moves.length - 1);
+  return Math.sqrt(variance);
+}
+
+/** How long an exchange order takes to reach the book and fill. */
+export const EXCHANGE_LATENCY_MS = 500;
+/** How long an on-chain swap takes to settle across a few blocks. */
+export const SETTLEMENT_MS = 3000;

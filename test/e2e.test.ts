@@ -121,7 +121,7 @@ function makeSnapshot(book: OrderBook, adverseBps: number): Snapshot {
       windowSec: 60,
       adverseBuyBps: adverseBps,
       adverseSellBps: adverseBps,
-      adverseSamples: 40,
+      adverseSamples: 40, volExchangeBps: 1.5, volSettlementBps: 1.8,
     },
     onchain: null,
     onchainUnavailable: "This run prices the exchange leg only; no pool was quoted.",

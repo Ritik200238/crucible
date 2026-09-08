@@ -138,8 +138,11 @@ function printRoute(r: CostEstimate, chosen: boolean, mid: number, quoteAssetPre
   const mark = chosen ? c.green("●") : c.dim("○");
   const total = chosen ? c.bold(bps(r.totalBps).padStart(11)) : c.dim(bps(r.totalBps).padStart(11));
   const est = r.hasEstimates ? c.yellow(" ~") : "  ";
+  // The error bar sits next to the number so a wide guess never reads like a
+  // firm one.
+  const band = c.dim(`± ${r.uncertaintyBps.toFixed(2)}`.padStart(8));
   console.log(
-    `  ${mark} ${(chosen ? c.bold(label) : label).padEnd(chosen && colour ? 34 : 26)} ${total}${est}  ${c.dim(money(r.totalUsd))}`,
+    `  ${mark} ${(chosen ? c.bold(label) : label).padEnd(chosen && colour ? 34 : 26)} ${total}${est}${band}  ${c.dim(money(r.totalUsd))}`,
   );
   for (const comp of r.components) {
     console.log(
