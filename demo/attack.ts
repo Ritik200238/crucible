@@ -337,7 +337,10 @@ const attacks: Attack[] = [
       if (after >= before) return "the edit did not take, so this attack proves nothing";
 
       const check = verifyLedger({ dir });
-      if (check.ok) return null;
+      // Failing for any reason is not the claim. The claim is that it fails at
+      // the record that was edited, so the break points at the tampering rather
+      // than at some unrelated condition that would mask it.
+      if (check.ok || check.brokenAt !== 0) return null;
       return (
         `the counter moved $${before.toLocaleString()} → $${after.toLocaleString()}, but the ledger ` +
         `no longer verifies: record ${check.brokenAt} was changed after it was written`
