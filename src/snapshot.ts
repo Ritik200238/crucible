@@ -127,6 +127,8 @@ export async function takeSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
     adverseSamples: adverse.samples,
   };
 
+  assertUsableBook(book, symbol);
+
   const bestBid = ticker.bidPrice;
   const bestAsk = ticker.askPrice;
   const mid = (bestBid + bestAsk) / 2;
@@ -206,6 +208,13 @@ export function walkBook(
 
   for (const level of levels) {
     if (remaining <= 0) break;
+    // A level that is not a real level is skipped rather than consumed. A
+    // negative quantity is the one that matters: `remaining -= -5` increases
+    // what is left to fill and lowers the running cost, so a single corrupt
+    // level produces an average price that was never available anywhere.
+    if (!Number.isFinite(level.price) || !Number.isFinite(level.qty)) continue;
+    if (level.price <= 0 || level.qty <= 0) continue;
+
     const take = Math.min(remaining, level.qty);
     cost += take * level.price;
     remaining -= take;
@@ -227,11 +236,54 @@ export function depthWithin(book: OrderBook, side: Side, mid: number, windowBps:
   const limit = side === "BUY" ? mid * (1 + windowBps / 10_000) : mid * (1 - windowBps / 10_000);
   let notional = 0;
   for (const level of levels) {
+    if (!Number.isFinite(level.price) || !Number.isFinite(level.qty)) continue;
+    if (level.price <= 0 || level.qty <= 0) continue;
     const inside = side === "BUY" ? level.price <= limit : level.price >= limit;
     if (!inside) break;
     notional += level.price * level.qty;
   }
   return notional;
+}
+
+/**
+ * Refuse a book that cannot be traded against.
+ *
+ * These are conditions an exchange should not produce and occasionally does:
+ * a market crossed during a halt or a feed glitch, an empty side, prices that
+ * are not numbers. Each of them still walks and still returns a figure, which
+ * is worse than failing — a cost computed from a broken book is a number with
+ * no market behind it, and everything downstream treats it as real.
+ */
+export function assertUsableBook(book: OrderBook, symbol: string): void {
+  const bestBid = book.bids[0];
+  const bestAsk = book.asks[0];
+
+  if (!bestBid || !bestAsk) {
+    throw new SnapshotError(
+      `${symbol} has an empty ${!bestBid ? "bid" : "ask"} side. There is nothing to trade against.`,
+    );
+  }
+  if (!Number.isFinite(bestBid.price) || !Number.isFinite(bestAsk.price)) {
+    throw new SnapshotError(`${symbol} returned a book with a price that is not a number.`);
+  }
+  if (bestBid.price >= bestAsk.price) {
+    throw new SnapshotError(
+      `${symbol} is crossed: the best bid ${bestBid.price} is at or above the best ask ` +
+        `${bestAsk.price}. That is a halted or broken market, not a spread to trade.`,
+    );
+  }
+
+  // Sorting is the exchange's job, but a mis-sorted side would be walked in the
+  // wrong order and quietly overstate the cost of every order.
+  const misordered =
+    book.asks.some((l, i) => i > 0 && l.price < book.asks[i - 1]!.price) ||
+    book.bids.some((l, i) => i > 0 && l.price > book.bids[i - 1]!.price);
+  if (misordered) {
+    throw new SnapshotError(
+      `${symbol} returned a book that is not in price order, so walking it would price the order ` +
+        `against levels in the wrong sequence.`,
+    );
+  }
 }
 
 /**

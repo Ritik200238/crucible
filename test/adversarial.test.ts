@@ -9,6 +9,7 @@ import { assertSpendable } from "../src/exec/execute.ts";
 import { deriveState, emptyState } from "../src/risk/state.ts";
 import { priceAllRoutes, DEFAULT_MAX_DIVERGENCE_BPS } from "../src/cost/model.ts";
 import { route } from "../src/decide/router.ts";
+import { assertUsableBook, walkBook, depthWithin, SnapshotError } from "../src/snapshot.ts";
 import { evaluate } from "../src/risk/engine.ts";
 import { DEFAULT_POLICY } from "../src/config.ts";
 import type {
@@ -530,5 +531,90 @@ describe("a venue price too good to be true", () => {
     // has to sit well clear of it or ordinary trading trips the guard.
     assert.ok(DEFAULT_MAX_DIVERGENCE_BPS >= 50);
     assert.equal(onchainRoute(MID * 1.001).unavailable, undefined, "10 bps out is normal");
+  });
+});
+
+describe("a book an exchange should not send, but sometimes does", () => {
+  const ok = (over: Partial<OrderBook> = {}): OrderBook => ({
+    lastUpdateId: 1,
+    bids: [
+      { price: 751, qty: 10 },
+      { price: 750, qty: 10 },
+    ],
+    asks: [
+      { price: 752, qty: 10 },
+      { price: 753, qty: 10 },
+    ],
+    ...over,
+  });
+
+  test("a healthy book passes", () => {
+    assert.doesNotThrow(() => assertUsableBook(ok(), "BNBUSDT"));
+  });
+
+  test("a crossed market is refused rather than traded into", () => {
+    // Bid at or above ask means halted or glitched. It still walks and still
+    // returns a plausible-looking number, which is worse than failing.
+    const crossed = ok({ bids: [{ price: 760, qty: 10 }] });
+    assert.throws(() => assertUsableBook(crossed, "BNBUSDT"), /crossed/);
+  });
+
+  test("an empty side is refused", () => {
+    assert.throws(() => assertUsableBook(ok({ asks: [] }), "BNBUSDT"), /empty ask side/);
+  });
+
+  test("a price that is not a number is refused", () => {
+    const broken = ok({ asks: [{ price: NaN, qty: 10 }] });
+    assert.throws(() => assertUsableBook(broken, "BNBUSDT"), SnapshotError);
+  });
+
+  test("a book out of price order is refused", () => {
+    // Walking a mis-sorted side prices the order against levels in the wrong
+    // sequence and overstates every cost.
+    const jumbled = ok({
+      asks: [
+        { price: 760, qty: 10 },
+        { price: 752, qty: 10 },
+      ],
+    });
+    assert.throws(() => assertUsableBook(jumbled, "BNBUSDT"), /price order/);
+  });
+
+  test("a negative quantity is skipped, not consumed", () => {
+    // The subtraction is what makes this dangerous: `remaining -= -5` increases
+    // what is left to fill and lowers the running cost, so one corrupt level
+    // produces an average price that was never available anywhere.
+    const corrupt = ok({
+      asks: [
+        { price: 752, qty: -5 },
+        { price: 753, qty: 10 },
+      ],
+    });
+    const walk = walkBook(corrupt, "BUY", 5);
+    assert.equal(walk.avgPrice, 753, "the only real level is the one at 753");
+    assert.equal(walk.levelsUsed, 1);
+  });
+
+  test("a zero-size level is skipped without ending the walk", () => {
+    // Transient and normal, unlike a negative size. It must not stop the walk.
+    const withHole = ok({
+      asks: [
+        { price: 752, qty: 0 },
+        { price: 753, qty: 10 },
+      ],
+    });
+    const walk = walkBook(withHole, "BUY", 5);
+    assert.equal(walk.avgPrice, 753);
+    assert.equal(walk.exhausted, false);
+  });
+
+  test("depth ignores unusable levels rather than counting them", () => {
+    const corrupt = ok({
+      asks: [
+        { price: 752, qty: -5 },
+        { price: 752.5, qty: 10 },
+      ],
+    });
+    assert.equal(depthWithin(corrupt, "BUY", 751.5, 100), 752.5 * 10);
   });
 });
