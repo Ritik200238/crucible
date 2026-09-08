@@ -32,6 +32,7 @@ import { deriveState, emptyState } from "./risk/state.ts";
 import { DEMO, MAINNET } from "./exec/binance-rest.ts";
 import { walletStatus, walletVersion } from "./exec/wallet.ts";
 import { summarise } from "./sampler/analyse.ts";
+import { findCrossover, liveQuoter } from "./analysis/crossover.ts";
 import { ALL_RULES } from "./risk/rules.ts";
 import { evaluate } from "./risk/engine.ts";
 import type {
@@ -758,11 +759,68 @@ async function cmdSample(): Promise<number> {
   return failed > 0 ? 1 : 0;
 }
 
+async function cmdCrossover(args: Map<string, string>): Promise<number> {
+  const symbol = (args.get("symbol") ?? "BNBUSDT").toUpperCase();
+  const side = (args.get("side") ?? "BUY").toUpperCase() as Side;
+  if (side !== "BUY" && side !== "SELL") {
+    throw new RouteError(`--side must be BUY or SELL, got "${side}".`);
+  }
+  const commission = await resolveCommission(symbol);
+  const mid = await fetchMid(symbol);
+
+  const quoter = liveQuoter(
+    (o) => takeSnapshot({ ...o, includeWalletQuote: true, commission }),
+    priceAllRoutes,
+    symbol,
+    side,
+    mid,
+  );
+
+  console.log();
+  console.log(`  ${c.bold("CRUCIBLE")}  ${c.dim(`${symbol} ${side} — where the cheaper venue changes`)}`);
+  console.log(c.dim(`  Each probe below is a live quote at that size. This takes a few seconds.`));
+  console.log();
+
+  const result = await findCrossover(quoter, {
+    symbol,
+    side,
+    minUsd: numArg(args, "min") ?? 100,
+    maxUsd: numArg(args, "max") ?? 500_000,
+    steps: numArg(args, "steps") ?? 9,
+  });
+
+  if (args.get("json") === "true") {
+    console.log(JSON.stringify(result, null, 2));
+    return 0;
+  }
+
+  for (const p of [...result.probes].sort((a, b) => a.usd - b.usd)) {
+    const edge = p.edgeBps === null ? c.dim("  —  ") : (p.edgeBps >= 0 ? c.green : c.red)(bps(p.edgeBps).padStart(11));
+    console.log(
+      `  ${money(p.usd).padStart(12)}   ` +
+        `${c.dim("binance")} ${(p.binanceBps === null ? "—" : p.binanceBps.toFixed(2)).padStart(7)}   ` +
+        `${c.dim("on-chain")} ${(p.onchainBps === null ? "—" : p.onchainBps.toFixed(2)).padStart(7)}   ` +
+        `${edge}  ${c.bold(p.cheapest ?? "neither")}`,
+    );
+  }
+
+  console.log();
+  if (result.crossoverUsd !== null) {
+    console.log(`  ${c.green("crossover")}  ${c.bold(money(result.crossoverUsd))} ${c.dim(`± ${(result.precision * 100).toFixed(0)}%`)}`);
+  } else {
+    console.log(`  ${c.yellow("no crossover")} ${c.dim("in the range probed")}`);
+  }
+  console.log(`  ${result.verdict}`);
+  console.log();
+  return 0;
+}
+
 const HELP = `
   ${c.bold("crucible")} — smart execution for Binance agents
 
   ${c.bold("COMMANDS")}
     quote      Price an order on every venue, no decision
+    crossover  Find the order size where the cheaper venue changes
     route      Choose a venue and style, and run the risk engine
     status     What can actually execute right now
     policy     Show which rules are active
@@ -785,6 +843,7 @@ const HELP = `
     crucible quote  --symbol BNBUSDT --usd 500
     crucible route  --symbol BNBUSDT --usd 50000
     crucible route  --symbol BNBUSDT --usd 2000000
+    crucible crossover --symbol BNBUSDT
     crucible samples
 `;
 
@@ -803,6 +862,7 @@ async function main(): Promise<number> {
       case "claim": return cmdClaim(args);
       case "sample": return await cmdSample();
       case "samples": return cmdSamples(args);
+      case "crossover": return await cmdCrossover(args);
       case undefined:
       case "help":
       case "--help":

@@ -35,7 +35,7 @@ Point an agent at it in one line:
 claude mcp add crucible --transport http https://crucible-router.vercel.app/mcp
 ```
 
-Eight of the ten tools answer anyone. `execute` and `reconcile` need the
+Nine of the eleven tools answer anyone. `execute` and `reconcile` need the
 operator's key — a public instance that trades for strangers would be trading
 their money — and this one holds no exchange credential, no wallet session and
 no signing key, so there is nothing on it to trade with.
@@ -116,23 +116,23 @@ Measured, not asserted. Regenerate any of it with `npm run evidence`.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 11 | 100% | 1.61 bps | 10.07 bps | 8.46 bps |
-| BNBUSDT | $1,000 | 11 | 100% | 1.55 bps | 10.07 bps | 8.52 bps |
-| BNBUSDT | $10,000 | 11 | 100% | 2.27 bps | 10.07 bps | 7.79 bps |
-| BNBUSDT | $100,000 | 11 | 27% | 11.76 bps | 11.63 bps | -0.12 bps |
-| BTCUSDT | $100 | 11 | 0% | 51.71 bps | 10.00 bps | -41.72 bps |
-| BTCUSDT | $1,000 | 11 | 0% | 52.81 bps | 10.00 bps | -42.82 bps |
-| BTCUSDT | $10,000 | 11 | 0% | 55.89 bps | 10.00 bps | -45.89 bps |
-| BTCUSDT | $100,000 | 11 | 0% | 64.41 bps | 10.00 bps | -53.91 bps |
-| ETHUSDT | $100 | 11 | 100% | 2.66 bps | 10.02 bps | 7.36 bps |
-| ETHUSDT | $1,000 | 11 | 100% | 3.37 bps | 10.02 bps | 6.65 bps |
-| ETHUSDT | $10,000 | 11 | 55% | 9.86 bps | 10.02 bps | 0.16 bps |
-| ETHUSDT | $100,000 | 11 | 0% | 60.22 bps | 10.16 bps | -50.14 bps |
-| XRPUSDT | $100 | 11 | 0% | 76.63 bps | 10.15 bps | -67.02 bps |
-| XRPUSDT | $1,000 | 11 | 0% | 78.89 bps | 10.25 bps | -69.27 bps |
-| XRPUSDT | $10,000 | 11 | 0% | 110.38 bps | 10.22 bps | -100.00 bps |
+| BNBUSDT | $100 | 42 | 100% | 1.46 bps | 10.07 bps | 8.63 bps |
+| BNBUSDT | $1,000 | 42 | 100% | 1.09 bps | 10.07 bps | 8.94 bps |
+| BNBUSDT | $10,000 | 42 | 100% | 1.95 bps | 10.07 bps | 8.12 bps |
+| BNBUSDT | $100,000 | 42 | 67% | 11.03 bps | 11.81 bps | 0.47 bps |
+| BTCUSDT | $100 | 42 | 0% | 51.70 bps | 10.00 bps | -41.70 bps |
+| BTCUSDT | $1,000 | 42 | 0% | 53.40 bps | 10.00 bps | -43.40 bps |
+| BTCUSDT | $10,000 | 42 | 0% | 56.28 bps | 10.00 bps | -46.28 bps |
+| BTCUSDT | $100,000 | 42 | 0% | 65.56 bps | 10.00 bps | -55.54 bps |
+| ETHUSDT | $100 | 42 | 100% | 2.15 bps | 10.02 bps | 7.85 bps |
+| ETHUSDT | $1,000 | 42 | 100% | 3.02 bps | 10.02 bps | 6.95 bps |
+| ETHUSDT | $10,000 | 42 | 43% | 11.08 bps | 10.02 bps | -1.02 bps |
+| ETHUSDT | $100,000 | 42 | 0% | 64.35 bps | 10.21 bps | -54.04 bps |
+| XRPUSDT | $100 | 42 | 0% | 81.52 bps | 10.18 bps | -71.34 bps |
+| XRPUSDT | $1,000 | 42 | 0% | 82.74 bps | 10.22 bps | -72.62 bps |
+| XRPUSDT | $10,000 | 42 | 0% | 111.82 bps | 10.23 bps | -101.56 bps |
 
-Measured across 165 samples spanning 1.6 hours. On-chain was cheaper in 39% of them.
+Measured across 630 samples spanning 6.8 hours. On-chain was cheaper in 41% of them.
 <!-- EVIDENCE:END -->
 
 **The cheaper venue changes with size, and the crossover is different for each

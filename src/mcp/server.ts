@@ -40,6 +40,7 @@ import { BinanceError, fetchMid } from "../venues/binance.ts";
 import { resolveCommission } from "../venues/commission.ts";
 import { fetchAccountEquity } from "../venues/account.ts";
 import { OnchainError } from "../venues/onchain.ts";
+import { findCrossover, liveQuoter } from "../analysis/crossover.ts";
 import { SnapshotError } from "../snapshot.ts";
 import type { Plan, RollingState, Side, Snapshot } from "../types.ts";
 
@@ -582,6 +583,73 @@ export function buildServer(opts: BuildOptions): McpServer {
           lines.push("  The hold against the caps is released.");
         }
         return text(lines.join("\n"));
+      } catch (err) {
+        return fail(describeError(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    "crossover",
+    {
+      title: "Find the size where the cheaper venue changes",
+      description:
+        "Answer the question behind a quote: up to what order size should this pair go on-chain at " +
+        "all? Bisects the real cost curves with live quotes until the flip point is pinned, and " +
+        "reports no crossover rather than a number when one venue wins at every size. Use it to set " +
+        "a routing threshold once instead of re-deciding on every order. Slower than `quote` — it " +
+        "takes about a dozen live quotes.",
+      inputSchema: {
+        symbol: z.string().describe("Trading pair, for example BNBUSDT"),
+        side: z.enum(["BUY", "SELL"]).describe("Order side"),
+        minUsd: z.number().positive().optional().describe("Smallest order to consider (default 100)"),
+        maxUsd: z.number().positive().optional().describe("Largest order to consider (default 500000)"),
+      },
+    },
+    async (args) => {
+      try {
+        const a = args as unknown as { symbol: string; side: Side; minUsd?: number; maxUsd?: number };
+        const symbol = a.symbol.toUpperCase();
+        const commission = await resolveCommission(symbol);
+        const mid = await fetchMid(symbol);
+        const quoter = liveQuoter(
+          (o) => takeSnapshot({ ...o, includeWalletQuote: true, commission }),
+          priceAllRoutes,
+          symbol,
+          a.side,
+          mid,
+        );
+
+        const result = await findCrossover(quoter, {
+          symbol,
+          side: a.side,
+          minUsd: a.minUsd,
+          maxUsd: a.maxUsd,
+        });
+
+        const rows = [...result.probes]
+          .sort((x, y) => x.usd - y.usd)
+          .map(
+            (p) =>
+              `  ${usd(p.usd).padStart(14)}   binance ${(p.binanceBps?.toFixed(2) ?? "—").padStart(7)}   ` +
+              `on-chain ${(p.onchainBps?.toFixed(2) ?? "—").padStart(7)}   ${p.cheapest ?? "neither"}`,
+          );
+
+        return text(
+          [
+            `${symbol} ${a.side} — where the cheaper venue changes`,
+            "",
+            ...rows,
+            "",
+            result.crossoverUsd !== null
+              ? `crossover ${usd(result.crossoverUsd)} (pinned to ${(result.precision * 100).toFixed(0)}% of its own size)`
+              : "no crossover in the range probed",
+            result.verdict,
+            "",
+            "Every row above is a live quote taken just now. Quote each order anyway — this is the " +
+              "shape of the market at this instant, not a standing rule.",
+          ].join("\n"),
+        );
       } catch (err) {
         return fail(describeError(err));
       }
