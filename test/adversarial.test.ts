@@ -5,10 +5,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Ledger } from "../src/ledger/chain.ts";
+import { assertSpendable } from "../src/exec/execute.ts";
 import { deriveState, emptyState } from "../src/risk/state.ts";
 import { evaluate } from "../src/risk/engine.ts";
 import { DEFAULT_POLICY } from "../src/config.ts";
-import type { ConfirmedFill, EvaluationContext, Policy, ProposedOrder } from "../src/types.ts";
+import type {
+  ConfirmedFill,
+  EvaluationContext,
+  Plan,
+  Policy,
+  ProposedOrder,
+} from "../src/types.ts";
 
 /**
  * Attacks, not features.
@@ -338,5 +345,69 @@ describe("the counters cannot be moved without breaking the chain", () => {
     // means forging the chain rather than editing a private counter.
     assert.equal(ledger.read().length, 1);
     assert.ok(ledger.head()?.hash);
+  });
+});
+
+describe("replaying an authorisation", () => {
+  const plan = (fingerprint: string): Plan =>
+    ({
+      id: fingerprint.slice(0, 12),
+      fingerprint,
+      intent: { symbol: "BNBUSDT", side: "BUY", baseQty: 1 },
+      snapshotHash: "s",
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      chosen: {
+        venue: "BINANCE_SPOT",
+        style: "TAKER",
+        components: [],
+        totalBps: 10,
+        totalUsd: 1,
+        effectivePrice: 752,
+        hasEstimates: false,
+        notes: [],
+      },
+      alternatives: [],
+      savingBps: 0,
+      savingUsd: 0,
+      baseQty: 1,
+      quoteQty: 752,
+      slices: [],
+      rationale: "",
+    }) as Plan;
+
+  test("a fresh fingerprint is spendable", () => {
+    assert.doesNotThrow(() => assertSpendable(plan("abc123"), tempLedger()));
+  });
+
+  test("a fingerprint already on the record is refused", () => {
+    // Expiry does not stop this: the same plan can be replayed freely inside
+    // its own minute, and the fingerprint is the authorisation.
+    const ledger = tempLedger();
+    const p = plan("deadbeefcafe0001");
+    ledger.append("execution.started", { planId: p.id, fingerprint: p.fingerprint });
+    assert.throws(() => assertSpendable(p, ledger), /already been executed/);
+  });
+
+  test("a completed execution also spends the fingerprint", () => {
+    const ledger = tempLedger();
+    const p = plan("deadbeefcafe0002");
+    ledger.append("execution.completed", { planId: p.id, fingerprint: p.fingerprint, fills: [] });
+    assert.throws(() => assertSpendable(p, ledger), /already been executed/);
+  });
+
+  test("a refusal does not spend the fingerprint", () => {
+    // An order that was blocked never reached a venue, so the same plan may be
+    // retried once whatever refused it is resolved.
+    const ledger = tempLedger();
+    const p = plan("deadbeefcafe0003");
+    ledger.append("execution.refused", { planId: p.id, fingerprint: p.fingerprint, reason: "dry run" });
+    assert.doesNotThrow(() => assertSpendable(p, ledger));
+  });
+
+  test("another plan's execution does not spend this one", () => {
+    const ledger = tempLedger();
+    ledger.append("execution.started", { planId: "other", fingerprint: "someoneelse" });
+    assert.doesNotThrow(() => assertSpendable(plan("deadbeefcafe0004"), ledger));
   });
 });

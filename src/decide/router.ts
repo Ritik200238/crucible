@@ -268,7 +268,13 @@ function explain(
   return parts.join(" ");
 }
 
-/** A plan may only execute once, and only before it expires. */
+/**
+ * Refuse a plan whose market state has gone stale.
+ *
+ * Expiry only. Single use cannot be settled from the plan alone, because
+ * nothing in it records whether it has already been spent — that check needs
+ * the ledger and lives in `execute`.
+ */
 export function assertExecutable(plan: Plan, now = Date.now()): void {
   if (now > plan.expiresAt) {
     const ageSec = Math.round((now - plan.createdAt) / 1000);

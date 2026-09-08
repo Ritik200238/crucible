@@ -285,12 +285,29 @@ export interface Receipt {
   predicted: CostEstimate;
   alternative: CostEstimate | null;
   fills: ConfirmedFill[];
-  realisedBps: number;
-  realisedUsd: number;
-  /** Realised minus predicted. The product's own honesty metric. */
-  errorBps: number;
-  savingBps: number;
-  savingUsd: number;
+  /** What the fill price alone cost against mid, before commission. */
+  realisedGrossBps: number;
+  /**
+   * Commission as a share of what traded. Null when it was charged in an asset
+   * that cannot be priced from this fill.
+   */
+  realisedFeeBps: number | null;
+  /**
+   * The full realised cost: price against mid plus commission.
+   *
+   * Null when the fee could not be priced. The prediction includes commission
+   * as its largest component, so a realised figure that silently omitted it
+   * would understate the cost by roughly one commission every time — and this
+   * is the number the whole model is judged against.
+   */
+  realisedBps: number | null;
+  realisedUsd: number | null;
+  /** Realised minus predicted. Null when realised could not be completed. */
+  errorBps: number | null;
+  /** Why the comparison could not be made, when it could not. */
+  errorUnavailable?: string;
+  savingBps: number | null;
+  savingUsd: number | null;
   completedAt: number;
 }
 

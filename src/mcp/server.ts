@@ -332,10 +332,16 @@ server.registerTool(
 
       const lines = [
         `RECEIPT ${receipt.planId} · fingerprint ${receipt.fingerprint}`,
-        `predicted ${bps(receipt.predicted.totalBps)} · realised ${bps(receipt.realisedBps)} · error ${bps(receipt.errorBps)}`,
-        receipt.alternative
+        receipt.realisedBps === null
+          ? `predicted ${bps(receipt.predicted.totalBps)} · realised unavailable — ${receipt.errorUnavailable}`
+          : `predicted ${bps(receipt.predicted.totalBps)} · realised ${bps(receipt.realisedBps)} ` +
+            `(price ${bps(receipt.realisedGrossBps)} + commission ${bps(receipt.realisedFeeBps ?? 0)}) ` +
+            `· error ${bps(receipt.errorBps ?? 0)}`,
+        receipt.alternative && receipt.savingUsd !== null
           ? `the other venue would have cost ${bps(receipt.alternative.totalBps)}, so this saved ${usd(receipt.savingUsd)}`
-          : "no alternative venue was available to compare against",
+          : receipt.alternative
+            ? `the other venue would have cost ${bps(receipt.alternative.totalBps)}, but the saving cannot be stated without a complete realised cost`
+            : "no alternative venue was available to compare against",
         "",
         ...receipt.fills.map(
           (f) =>

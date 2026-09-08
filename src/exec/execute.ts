@@ -5,8 +5,9 @@
  * hold on both paths, and each of them exists because breaking it is how an
  * execution tool ends up reporting a trade that did not happen:
  *
- *   1. A plan is checked for expiry before anything is sent. Stale market state
- *      is re-priced, never replayed.
+ *   1. A plan is checked for expiry and for having already been spent before
+ *      anything is sent. Stale market state is re-priced, never replayed, and a
+ *      fingerprint executes at most once.
  *   2. Nothing is transmitted unless the policy says live and the environment
  *      agrees. Two switches, both held by a human.
  *   3. The response to the placing call is never treated as the outcome. The
@@ -69,6 +70,41 @@ export function assertLive(policy: Policy): void {
     throw new ExecutionError(
       `The policy allows live execution but CRUCIBLE_LIVE is not set to 1 in this shell. ` +
         `Both switches have to agree before real money moves. Nothing has been sent.`,
+    );
+  }
+}
+
+/**
+ * Refuse a plan that has already been acted on.
+ *
+ * A fingerprint covers the intent, the market state and the policy, so the same
+ * one arriving twice is the same authorisation being spent twice. Expiry alone
+ * does not stop that: a plan can be replayed freely inside its own minute.
+ *
+ * The check reads the ledger rather than a set held in memory, because an
+ * in-memory guard is cleared by a restart, and "restart the process" is not a
+ * difficulty for anything that would want to replay an order.
+ */
+export function assertSpendable(plan: Plan, ledger: Ledger): void {
+  let seen = false;
+  try {
+    seen = ledger
+      .read()
+      .some(
+        (r) =>
+          (r.kind === "execution.started" || r.kind === "execution.completed") &&
+          (r.payload as { fingerprint?: string })?.fingerprint === plan.fingerprint,
+      );
+  } catch {
+    // An unreadable ledger cannot prove the plan is fresh. It also cannot prove
+    // it is spent, and refusing every order because the log is unreadable would
+    // be its own failure, so this falls through and the attempt is recorded.
+    return;
+  }
+  if (seen) {
+    throw new ExecutionError(
+      `Plan ${plan.id} has already been executed. A fingerprint authorises one order, and this one ` +
+        `is on the record. Take a fresh quote rather than sending the same authorisation twice.`,
     );
   }
 }
@@ -217,10 +253,34 @@ export function buildReceipt(
   const direction = plan.intent.side === "BUY" ? 1 : -1;
 
   const avgPrice = filledBase > 0 ? filledQuote / filledBase : 0;
-  const realisedBps =
+  const realisedGrossBps =
     filledBase > 0 ? ((avgPrice - snapshot.mid) / snapshot.mid) * 10_000 * direction : 0;
 
+  // Commission has to be added in, or the comparison is not one. The prediction
+  // carries the taker fee as its largest component, so leaving it out of the
+  // realised side understates the cost by about that fee on every fill.
+  //
+  // A fee charged in an asset this fill cannot price is not folded in silently.
+  // The realised figure is reported as unavailable instead, because a number
+  // that is quietly missing a component is worse than an absent one.
+  const unpriceable = fills.filter((f) => f.totalFeeInQuote === null);
+  const feeInQuote = fills.reduce((a, f) => a + (f.totalFeeInQuote ?? 0), 0);
+
+  // Nothing filled is not the same as a fee that cannot be priced. An order
+  // that traded nothing cost nothing, and reporting that as unavailable would
+  // hide a clean fact behind a caveat meant for a different problem.
+  const realisedFeeBps =
+    filledQuote <= 0 ? 0 : unpriceable.length > 0 ? null : (feeInQuote / filledQuote) * 10_000;
+
+  const realisedBps = realisedFeeBps === null ? null : realisedGrossBps + realisedFeeBps;
   const alternative = plan.alternatives.find((a) => !a.unavailable) ?? null;
+
+  const errorUnavailable =
+    realisedBps === null
+      ? `Commission on ${unpriceable.length} fill(s) was charged in an asset that cannot be ` +
+        `priced against ${snapshot.filters.quoteAsset} from this trade, so the realised cost ` +
+        `cannot be completed and the comparison against the prediction is not made.`
+      : undefined;
 
   return {
     planId: plan.id,
@@ -229,11 +289,17 @@ export function buildReceipt(
     predicted: plan.chosen,
     alternative,
     fills,
+    realisedGrossBps,
+    realisedFeeBps,
     realisedBps,
-    realisedUsd: (realisedBps / 10_000) * filledQuote,
-    errorBps: realisedBps - plan.chosen.totalBps,
-    savingBps: alternative ? alternative.totalBps - realisedBps : 0,
-    savingUsd: alternative ? ((alternative.totalBps - realisedBps) / 10_000) * filledQuote : 0,
+    realisedUsd: realisedBps === null ? null : (realisedBps / 10_000) * filledQuote,
+    errorBps: realisedBps === null ? null : realisedBps - plan.chosen.totalBps,
+    ...(errorUnavailable ? { errorUnavailable } : {}),
+    savingBps: realisedBps === null || !alternative ? null : alternative.totalBps - realisedBps,
+    savingUsd:
+      realisedBps === null || !alternative
+        ? null
+        : ((alternative.totalBps - realisedBps) / 10_000) * filledQuote,
     completedAt,
   };
 }
@@ -260,6 +326,7 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
 
   try {
     assertExecutable(plan, now);
+    assertSpendable(plan, ledger);
     assertLive(policy);
   } catch (err) {
     record("execution.refused", {

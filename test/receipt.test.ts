@@ -328,12 +328,52 @@ test("the saving is measured against the best route that could have been used", 
   closeTo(receipt.savingUsd, ((18 - 10) / 10_000) * 752.752);
 });
 
-test("no alternative means no saving to claim", () => {
+test("no alternative means there is no saving to state", () => {
   const receipt = buildReceipt(plan({ alternatives: [] }), snapshot(), [fill()], CREATED_AT + 1500);
 
+  // Null rather than zero. A zero would read as a comparison that came out
+  // even, when in fact no comparison was possible.
   assert.equal(receipt.alternative, null);
-  assert.equal(receipt.savingBps, 0);
-  assert.equal(receipt.savingUsd, 0);
+  assert.equal(receipt.savingBps, null);
+  assert.equal(receipt.savingUsd, null);
+});
+
+test("the realised cost includes commission, or it is not comparable", () => {
+  // The prediction carries the taker fee as its largest component, so a
+  // realised figure measured on price alone understates the cost by about that
+  // fee on every fill, and the error would be wrong by the same amount.
+  const withFee = fill({
+    filledBaseQty: 2,
+    filledQuoteQty: 1_505.5,
+    avgPrice: 752.75,
+    fees: [{ asset: "USDT", amount: 1.5055, valueInQuote: 1.5055 }],
+    totalFeeInQuote: 1.5055,
+  });
+  const receipt = buildReceipt(plan(), snapshot(), [withFee], CREATED_AT + 1500);
+
+  assert.ok(receipt.realisedFeeBps !== null);
+  closeTo(receipt.realisedFeeBps!, 10, 1e-6, "0.1% commission is 10 bps of what traded");
+  closeTo(receipt.realisedBps!, receipt.realisedGrossBps + receipt.realisedFeeBps!);
+  closeTo(receipt.errorBps!, receipt.realisedBps! - receipt.predicted.totalBps);
+});
+
+test("a fee in an asset that cannot be priced makes the comparison unavailable", () => {
+  // Folding an unknown amount in as zero would understate the cost silently.
+  const opaque = fill({
+    filledBaseQty: 2,
+    filledQuoteQty: 1_505.5,
+    avgPrice: 752.75,
+    fees: [{ asset: "SOMETOKEN", amount: 3, valueInQuote: null }],
+    totalFeeInQuote: null,
+  });
+  const receipt = buildReceipt(plan(), snapshot(), [opaque], CREATED_AT + 1500);
+
+  assert.equal(receipt.realisedBps, null);
+  assert.equal(receipt.errorBps, null);
+  assert.equal(receipt.savingBps, null);
+  assert.match(receipt.errorUnavailable ?? "", /cannot be priced/);
+  // The gross figure still stands: the price it filled at is known.
+  assert.ok(Number.isFinite(receipt.realisedGrossBps));
 });
 
 test("an order that filled nothing produces zeros rather than NaN", () => {
