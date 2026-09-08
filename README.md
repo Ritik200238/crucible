@@ -126,6 +126,19 @@ node --experimental-strip-types demo/agent-session.ts   # the same product, driv
 
 `demo/attack.ts` exits non-zero if any attack succeeds, and CI runs it.
 
+There is also a dashboard, if you would rather see a cost breakdown than read
+one:
+
+```bash
+npm run dashboard        # http://127.0.0.1:8787
+```
+
+It quotes live, shows the component breakdown for both venues side by side, the
+rules in force, the recorded evidence, and the ledger with its verification
+state. `node:http` and no framework — every endpoint reads the same functions
+the CLI and the MCP server read, so the page cannot show a number the product
+does not actually produce.
+
 ## Connect it to an agent
 
 ```bash
