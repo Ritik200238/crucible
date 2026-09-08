@@ -272,7 +272,7 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 16 files, ~7,945 lines, **444 tests, all passing** |
+| Tests | 17 files, ~8,097 lines, **453 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
@@ -280,6 +280,9 @@ A ledger that only holds successes is a marketing document.
 
 **MCP server** — nine tools an AI agent drives: `quote`, `route`, `execute`,
 `policy`, `evidence`, `verify_ledger`, `calibration`, `reconcile`, `status`.
+Over stdio for a local agent, or over streamable HTTP at `POST /mcp` on the
+dashboard for a hosted one, with a public read-only mode gated by an operator
+token.
 
 The split is deliberate. `quote` prices without deciding. `route` decides and
 returns a fingerprinted plan. `execute` takes **only a plan id** — never order
@@ -388,11 +391,15 @@ reads as evidence while being the opposite, so it refuses to. The report also
 refuses to describe a tendency below five executions, however consistent they
 look.
 
-### No hosted endpoint
+### Hostable, not yet hosted
 
-Running it means cloning the repository. A hosted MCP endpoint would let anyone
-connect in one command, and that requires a server the wallet session can live
-on.
+The MCP server now runs over streamable HTTP at `POST /mcp` on the dashboard,
+stateless, with a public read-only mode: with `CRUCIBLE_MCP_TOKEN` set, every
+read tool answers anyone and `execute`/`reconcile` require the token as a
+bearer. Without a token it refuses to bind beyond loopback. What remains is a
+machine to run it on — a VPS or a container host — and a domain. That is an
+operator's action, and until it is done the only way to reach this is to clone
+the repository.
 
 ### The evidence is young
 
@@ -431,7 +438,7 @@ npm run cli -- status                                  # what can actually execu
 npm run cli -- policy                                  # what is protecting you
 npm run cli -- samples                                 # the evidence so far
 
-npm test              # 444 tests
+npm test              # 453 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```

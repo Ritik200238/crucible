@@ -158,9 +158,34 @@ does not actually produce.
 
 ## Connect it to an agent
 
+Locally, over stdio:
+
 ```bash
 claude mcp add crucible -- node --experimental-strip-types /absolute/path/to/crucible/src/mcp/server.ts
 ```
+
+Or over HTTP, which is the same nine tools on a URL. The dashboard serves it at
+`POST /mcp`:
+
+```bash
+npm run dashboard                                   # local: every tool open on 127.0.0.1:8787/mcp
+claude mcp add crucible --transport http http://127.0.0.1:8787/mcp
+```
+
+To host it, give the instance an operator token. That one variable does three
+things: binds every interface instead of loopback, makes the instance
+**public read-only** — `quote`, `route`, `policy`, `evidence`, `calibration`,
+`verify_ledger` and `status` answer anyone — and requires
+`Authorization: Bearer <token>` before `execute` or `reconcile` will act:
+
+```bash
+CRUCIBLE_MCP_TOKEN=<long random secret> npm run dashboard
+claude mcp add crucible --transport http https://your-host/mcp   # anyone: read-only
+```
+
+Stateless by design: each request builds a fresh server and tears it down. The
+token is compared in constant time. Without a token the server refuses to bind
+beyond loopback, so a hosted instance cannot be open by accident.
 
 | Tool | What it does |
 |---|---|

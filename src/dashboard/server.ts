@@ -33,9 +33,23 @@ import { verifyLedger } from "../ledger/verify.ts";
 import { BinanceError } from "../venues/binance.ts";
 import { OnchainError } from "../venues/onchain.ts";
 import { renderPage } from "./page.ts";
+import { handleMcpRequest } from "../mcp/http.ts";
 import type { CostComponent, Side } from "../types.ts";
 
 export const DEFAULT_PORT = 8787;
+
+/**
+ * Who may execute through the HTTP MCP endpoint.
+ *
+ * `CRUCIBLE_MCP_TOKEN` set: the instance is treated as public, and execute and
+ * reconcile need that token as a bearer. Unset: local, every tool open. A
+ * hosted instance without a token would let anyone who found the URL send an
+ * order, so `startDashboard` refuses to bind beyond loopback without one.
+ */
+function mcpOptions(): { operatorToken?: string } {
+  const token = process.env.CRUCIBLE_MCP_TOKEN?.trim();
+  return token ? { operatorToken: token } : {};
+}
 
 /** How many records the ledger panel shows. */
 const RECENT_RECORDS = 50;
@@ -344,6 +358,15 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const url = new URL(req.url ?? "/", "http://dashboard.invalid");
   const path = url.pathname;
 
+  // The MCP endpoint takes POST and manages its own replies. It sits before the
+  // read-only guard because it is the one route here that may change state —
+  // and only for a caller holding the operator's token when the instance is
+  // public.
+  if (path === "/mcp") {
+    await handleMcpRequest(req, res, mcpOptions());
+    return;
+  }
+
   // HEAD is answered wherever GET is, which HTTP requires. Node discards the
   // body of a HEAD response on its own, so the handlers below need no special
   // case: they build the reply as usual and only the headers reach the client.
@@ -375,8 +398,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       default:
         sendJson(res, 404, {
           error:
-            `Nothing is served at ${path}. This server answers / for the page, and ` +
-            `/api/quote, /api/evidence, /api/policy and /api/ledger for its data.`,
+            `Nothing is served at ${path}. This server answers / for the page, ` +
+            `/api/quote, /api/evidence, /api/policy and /api/ledger for its data, and POST /mcp for agents.`,
         });
         return;
     }
@@ -388,6 +411,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
 }
 
 export interface DashboardOptions {
+  /** Interface to bind. Defaults to loopback, or every interface when CRUCIBLE_MCP_TOKEN is set. */
+  host?: string;
   /** Start listening on this port straight away. Omit to call listen yourself. */
   port?: number;
 }
@@ -401,19 +426,30 @@ export function createServer(opts: DashboardOptions = {}): Server {
       res.destroy();
     });
   });
-  if (opts.port !== undefined) server.listen(opts.port);
+  // Loopback unless the instance has been given an operator token, which is
+  // the signal that it is meant to be public. Binding every interface without
+  // one would hand the execute tool to whoever found the port.
+  if (opts.port !== undefined) server.listen(opts.port, opts.host ?? defaultHost());
   return server;
 }
 
-export async function startDashboard(port: number = DEFAULT_PORT): Promise<Server> {
-  const server = createServer({ port });
+function defaultHost(): string {
+  return process.env.CRUCIBLE_MCP_TOKEN?.trim() ? "0.0.0.0" : "127.0.0.1";
+}
+
+export async function startDashboard(port: number = DEFAULT_PORT, host?: string): Promise<Server> {
+  const server = createServer(host === undefined ? { port } : { port, host });
   // `once` rejects if the socket emits an error, so a port already in use
   // fails here with the real reason rather than hanging on a listen that
   // never happens.
   await once(server, "listening");
   const address = server.address();
   const bound = typeof address === "object" && address !== null ? address.port : port;
-  console.log(`Crucible dashboard is up. Open localhost:${bound} in a browser.`);
+  const where = host ?? defaultHost();
+  console.log(
+    `Crucible dashboard is up on ${where}:${bound}. Open localhost:${bound} in a browser; agents connect to POST /mcp` +
+      (process.env.CRUCIBLE_MCP_TOKEN?.trim() ? " (public: execute and reconcile need the operator token)." : "."),
+  );
   return server;
 }
 
