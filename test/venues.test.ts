@@ -27,7 +27,14 @@ import {
   type AggTrade,
 } from "../src/venues/binance.ts";
 import { feeTierBps, quoteTier, walletServiceFee, TOKENS } from "../src/venues/onchain.ts";
-import { resetSessionCache } from "../src/venues/wallet-quote.ts";
+import {
+  fetchWalletQuote,
+  hasWalletSession,
+  resetSessionCache,
+  type WalletDeps,
+} from "../src/venues/wallet-quote.ts";
+import type { SwapParams } from "../src/exec/wallet.ts";
+import type { WalletQuote } from "../src/types.ts";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -402,5 +409,152 @@ describe("the token map, where a wrong entry costs the whole order", () => {
       assert.equal(seen.get(key), undefined, `${asset} shares an address with ${seen.get(key)}`);
       seen.set(key, asset);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("the wallet's executable quote, and which way round it is", () => {
+  const NATIVE = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+  const USDT_ADDRESS = TOKENS.USDT!.address;
+  const BTCB_ADDRESS = TOKENS.BTC!.address;
+
+  const connected = { connected: true, raw: {} };
+  const answer: WalletQuote = {
+    fromSymbol: "USDT",
+    toSymbol: "WBNB",
+    fromAmount: 1000,
+    toAmount: 1.3,
+    price: 769.2,
+    slippageBps: 50,
+    raw: {},
+  };
+
+  /** Records the swap it was asked for, and answers with a fixed quote. */
+  function recorder(status = connected) {
+    const seen: SwapParams[] = [];
+    const deps: WalletDeps = {
+      status: async () => status,
+      quote: async (p: SwapParams) => {
+        seen.push(p);
+        return answer;
+      },
+    };
+    return { deps, seen };
+  }
+
+  test("a buy spends the quote asset to receive the base asset", async () => {
+    // The direction is the whole point. Reversed, this prices a sale of BNB
+    // against a purchase of it, and the comparison is between two different
+    // trades.
+    const { deps, seen } = recorder();
+    await fetchWalletQuote(
+      { baseAsset: "BNB", quoteAsset: "USDT", side: "BUY", baseQty: 2, midPrice: 750 },
+      deps,
+    );
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]!.fromToken, USDT_ADDRESS, "a buy spends USDT");
+    assert.equal(seen[0]!.toToken, NATIVE, "a buy receives BNB");
+    // Sized in the asset being spent: 2 BNB at 750 is 1,500 USDT.
+    assert.equal(seen[0]!.fromTokenQty, 1500);
+  });
+
+  test("a sell spends the base asset and is sized in it", async () => {
+    const { deps, seen } = recorder();
+    await fetchWalletQuote(
+      { baseAsset: "BNB", quoteAsset: "USDT", side: "SELL", baseQty: 2, midPrice: 750 },
+      deps,
+    );
+    assert.equal(seen[0]!.fromToken, NATIVE, "a sell spends BNB");
+    assert.equal(seen[0]!.toToken, USDT_ADDRESS, "a sell receives USDT");
+    // Not multiplied by the price: the size is already in the asset spent.
+    assert.equal(seen[0]!.fromTokenQty, 2);
+  });
+
+  test("BNB is addressed by its native sentinel, not the wrapped contract", async () => {
+    // The wallet wraps and unwraps as part of the swap. Passing the WBNB
+    // contract where the sentinel belongs asks for a different trade.
+    const { deps, seen } = recorder();
+    await fetchWalletQuote(
+      { baseAsset: "BNB", quoteAsset: "USDT", side: "SELL", baseQty: 1, midPrice: 750 },
+      deps,
+    );
+    assert.equal(seen[0]!.fromToken, NATIVE);
+  });
+
+  test("any other token is addressed by its contract", async () => {
+    const { deps, seen } = recorder();
+    await fetchWalletQuote(
+      { baseAsset: "BTC", quoteAsset: "USDT", side: "SELL", baseQty: 0.5, midPrice: 60_000 },
+      deps,
+    );
+    assert.equal(seen[0]!.fromToken, BTCB_ADDRESS);
+  });
+
+  test("no session means no quote, and no call", async () => {
+    const { deps, seen } = recorder({ connected: false, raw: {} });
+    const quote = await fetchWalletQuote(
+      { baseAsset: "BNB", quoteAsset: "USDT", side: "BUY", baseQty: 1, midPrice: 750 },
+      deps,
+    );
+    assert.equal(quote, null);
+    assert.equal(seen.length, 0, "the wallet must not be asked without a session");
+  });
+
+  test("an unlisted token returns null rather than guessing an address", async () => {
+    const { deps, seen } = recorder();
+    const quote = await fetchWalletQuote(
+      { baseAsset: "DOGE", quoteAsset: "USDT", side: "BUY", baseQty: 1, midPrice: 0.4 },
+      deps,
+    );
+    assert.equal(quote, null);
+    assert.equal(seen.length, 0);
+  });
+
+  test("a wallet-side failure loses the second opinion, not the whole quote", async () => {
+    // A missing cross-check is a normal condition. Throwing here would take
+    // down a route that the pool priced perfectly well on its own.
+    const deps: WalletDeps = {
+      status: async () => connected,
+      quote: async () => {
+        throw new Error("wallet refused");
+      },
+    };
+    const quote = await fetchWalletQuote(
+      { baseAsset: "BNB", quoteAsset: "USDT", side: "BUY", baseQty: 1, midPrice: 750 },
+      deps,
+    );
+    assert.equal(quote, null);
+  });
+
+  test("the session check is cached, because it costs a process spawn", async () => {
+    // Uncached, this runs on every snapshot and dominates the latency of a
+    // quote. The cache is load-bearing, not an optimisation.
+    let calls = 0;
+    const deps: WalletDeps = {
+      status: async () => {
+        calls++;
+        return connected;
+      },
+      quote: async () => answer,
+    };
+    resetSessionCache();
+    await hasWalletSession(1_000_000, deps);
+    await hasWalletSession(1_030_000, deps);
+    assert.equal(calls, 1, "a second check inside the TTL must not spawn again");
+
+    await hasWalletSession(1_400_000, deps);
+    assert.equal(calls, 2, "past the TTL it must check again");
+  });
+
+  test("a wallet that cannot be reached is treated as no session, not as an error", async () => {
+    const deps: WalletDeps = {
+      status: async () => {
+        throw new Error("baw: command not found");
+      },
+      quote: async () => answer,
+    };
+    resetSessionCache();
+    assert.equal(await hasWalletSession(Date.now(), deps), false);
   });
 });

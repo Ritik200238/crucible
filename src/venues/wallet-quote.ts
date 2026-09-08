@@ -29,10 +29,28 @@ import type { Side, WalletQuote } from "../types.ts";
 let sessionCache: { at: number; connected: boolean } | null = null;
 const SESSION_TTL_MS = 60_000;
 
-export async function hasWalletSession(now = Date.now()): Promise<boolean> {
+/**
+ * Injectable wallet calls.
+ *
+ * Both default to the real CLI. They are parameters rather than module state so
+ * the direction logic below — which token is spent, which is received, and how
+ * much of it — can be checked without a signed-in wallet. Getting that backwards
+ * would price a buy against a sell and the mistake would not look like one.
+ */
+export interface WalletDeps {
+  status: typeof walletStatus;
+  quote: typeof quoteSwap;
+}
+
+const REAL: WalletDeps = { status: walletStatus, quote: quoteSwap };
+
+export async function hasWalletSession(
+  now = Date.now(),
+  deps: WalletDeps = REAL,
+): Promise<boolean> {
   if (sessionCache && now - sessionCache.at < SESSION_TTL_MS) return sessionCache.connected;
   try {
-    const status = await walletStatus();
+    const status = await deps.status();
     sessionCache = { at: now, connected: status.connected };
   } catch {
     // No CLI, no session, or the CLI refused. All of them mean the same thing
@@ -64,8 +82,11 @@ export interface WalletQuoteRequest {
  * opinion is a normal condition and must not lose the pool price that did
  * arrive; the disagreement rule simply has nothing to compare and stands down.
  */
-export async function fetchWalletQuote(req: WalletQuoteRequest): Promise<WalletQuote | null> {
-  if (!(await hasWalletSession())) return null;
+export async function fetchWalletQuote(
+  req: WalletQuoteRequest,
+  deps: WalletDeps = REAL,
+): Promise<WalletQuote | null> {
+  if (!(await hasWalletSession(Date.now(), deps))) return null;
 
   const base = TOKENS[req.baseAsset.toUpperCase()];
   const quote = TOKENS[req.quoteAsset.toUpperCase()];
@@ -80,7 +101,7 @@ export async function fetchWalletQuote(req: WalletQuoteRequest): Promise<WalletQ
   const fromTokenQty = buying ? req.baseQty * req.midPrice : req.baseQty;
 
   try {
-    return await quoteSwap({
+    return await deps.quote({
       fromToken,
       toToken,
       fromTokenQty: Number(fromTokenQty.toFixed(8)),
