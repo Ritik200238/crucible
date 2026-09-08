@@ -1,4 +1,4 @@
-# Hosting a read-only instance
+# Hosting a public instance
 
 One container. It carries no exchange credential, no wallet session and no
 signing key, so the two tools that could move money are refused twice over: by
@@ -11,7 +11,7 @@ browser — plus `POST /mcp`, so an agent anywhere can connect to it.
 
 `CRUCIBLE_MCP_TOKEN` does two things at once:
 
-- The instance becomes **public read-only**. `quote`, `route`, `policy`,
+- The instance **opens to the public**. `quote`, `route`, `policy`,
   `evidence`, `calibration`, `check_claim`, `verify_ledger` and `status` answer
   anyone. `execute` and `reconcile` require the token in an
   `Authorization: Bearer` header.
@@ -112,9 +112,9 @@ curl -s -X POST https://<your-host>/mcp \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"execute","arguments":{"planId":"x"}}}'
 ```
 
-The last one should come back `isError: true` with a message about the instance
-being read-only. If it does not, the token is not set, and the instance should
-be taken down until it is.
+The last one should come back `isError: true` with a message saying execute
+needs the operator's token. If it does not, the token is not set, and the
+instance should be taken down until it is.
 
 ## What ships in the image, and what never does
 

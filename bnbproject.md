@@ -296,8 +296,8 @@ A ledger that only holds successes is a marketing document.
 `policy`, `evidence`, `verify_ledger`, `calibration`, `reconcile`, `check_claim`,
 `status`.
 Over stdio for a local agent, or over streamable HTTP at `POST /mcp` on the
-dashboard for a hosted one, with a public read-only mode gated by an operator
-token.
+dashboard for a hosted one, where anyone can quote and route and only the
+operator's token can execute.
 
 The split is deliberate. `quote` prices without deciding. `route` decides and
 returns a fingerprinted plan. `execute` takes **only a plan id** — never order
@@ -450,7 +450,7 @@ look.
 ### Hostable, not yet hosted
 
 The MCP server now runs over streamable HTTP at `POST /mcp` on the dashboard,
-stateless, with a public read-only mode: with `CRUCIBLE_MCP_TOKEN` set, every
+stateless, with a public mode: with `CRUCIBLE_MCP_TOKEN` set, every
 read tool answers anyone and `execute`/`reconcile` require the token as a
 bearer. Without a token it refuses to bind beyond loopback. What remains is a
 machine to run it on — a VPS or a container host — and a domain. That is an

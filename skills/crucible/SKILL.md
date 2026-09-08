@@ -55,7 +55,7 @@ Crucible is an MCP server. Connect it, then let the agent call the tools.
 # local, over stdio
 claude mcp add crucible -- node --experimental-strip-types /path/to/crucible/src/mcp/server.ts
 
-# or over HTTP, against a running instance (read-only for anyone without the operator token)
+# or over HTTP, against a running instance (executing needs the operator token)
 claude mcp add crucible --transport http http://127.0.0.1:8787/mcp
 ```
 
@@ -68,7 +68,7 @@ The flow an agent follows:
 | 3 | `execute` | Execute **by plan id only**. The plan is the authorisation; the order cannot be edited between decision and fill. |
 | 4 | `check_claim` | Before telling the user what happened, check the summary against the ledger. |
 
-Read-only at any time: `policy`, `evidence`, `calibration`, `verify_ledger`,
+Available to anyone, any time: `policy`, `evidence`, `calibration`, `verify_ledger`,
 `status`. If `execute` reports an order as **unconfirmed** — sent, outcome not
 established — do not retry; call `reconcile` with the plan id.
 

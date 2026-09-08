@@ -148,7 +148,7 @@ footer .spacer { flex: 1; }
         <a class="btn primary" href="/app">Launch app &rarr;</a>
         <a class="btn" href="#evidence">Read the evidence</a>
       </div>
-      <p class="kicker"><span>Runs in this browser</span><span>Live market data</span><span>Read-only</span><span>No keys needed</span></p>
+      <p class="kicker"><span>Runs in this browser</span><span>Live market data</span><span>Route any order</span><span>No keys needed</span></p>
     </div>
 
     <div class="card panel" id="hero-panel">
@@ -233,7 +233,7 @@ footer .spacer { flex: 1; }
   <div class="wrap">
     <div class="label yellow">Connect</div>
     <h2>It is an MCP server. Point an agent at it.</h2>
-    <p class="intro">Ten tools over stdio or HTTP. On this public instance every read tool answers anyone; the two that can move money refuse without the operator's token, and the instance holds no credential to move it with anyway.</p>
+    <p class="intro">Ten tools over stdio or HTTP. On this public instance eight of them answer anyone &mdash; quote, route, and every check. The two that move money need the operator's key: a public instance that trades for strangers would be trading their money, and this one holds no credential to trade with anyway.</p>
     <div class="two">
       <div>
         <pre class="cmd"><span class="c"># any MCP client, one line</span>

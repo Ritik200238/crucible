@@ -5,18 +5,37 @@ Crucible decides *where* and *how* — and proves what it cost.
 
 Built for the [Binance Agent OS Mini Hackathon](https://www.binance.com/en/blog/community/8802181509900814931), Track A.
 
-**Live, and read-only: [crucible-router.vercel.app](https://crucible-router.vercel.app)** — a quote priced when
-the page loads, the measured crossover, twenty real executions graded against
-what they were predicted to cost, and a ledger you can verify in your own
-browser. The app itself is at [/app](https://crucible-router.vercel.app/app). Point an agent at it:
+An agent that sends a market order pays the spread, the commission and the
+impact — routinely more than the edge it was chasing. Binance Agent OS gives
+that agent two venues for the same asset, and they do not cost the same.
+Crucible prices both at one instant, routes each order to the cheaper one,
+clears it through seventeen deterministic rules, executes, and reads the fill
+back from the venue. Then it tells you how wrong it was.
+
+What that has produced so far — every figure checkable in this repository:
+
+- **20 real orders** through the full pipeline on Binance's matching engine,
+  each receipted, with a mean prediction error of **0.08 bps**
+- **Your real commission**, read through Binance's own MCP server, not a
+  public fee schedule
+- **17 bugs found by attacking it**, three of which could have moved money to
+  the wrong place — nine of them re-run as attacks in CI on every push
+- **492 tests**, none of which need a network
+- A signed, hash-chained ledger you can **verify in your own browser**
+
+**Try it now: [crucible-router.vercel.app](https://crucible-router.vercel.app).**
+Quote any pair at any size, route it and watch every rule run, read the
+evidence, check the ledger. The app is at [/app](https://crucible-router.vercel.app/app).
+Point an agent at it in one line:
 
 ```bash
 claude mcp add crucible --transport http https://crucible-router.vercel.app/mcp
 ```
 
-Every read tool answers anyone. `execute` and `reconcile` refuse without the
-operator's token, and the instance holds no exchange credential, no wallet
-session and no signing key — so there is nothing there to execute with.
+Eight of the ten tools answer anyone. `execute` and `reconcile` need the
+operator's key — a public instance that trades for strangers would be trading
+their money — and this one holds no exchange credential, no wallet session and
+no signing key, so there is nothing on it to trade with.
 
 ```
   CRUCIBLE  BNBUSDT  snapshot 389d3938b3e48d2c
@@ -188,14 +207,14 @@ claude mcp add crucible --transport http http://127.0.0.1:8787/mcp
 ```
 
 To host it, give the instance an operator token. That one variable does three
-things: binds every interface instead of loopback, makes the instance
-**public read-only** — `quote`, `route`, `policy`, `evidence`, `calibration`,
-`verify_ledger` and `status` answer anyone — and requires
+things: binds every interface instead of loopback, **opens the instance to the
+public** — `quote`, `route`, `policy`, `evidence`, `calibration`,
+`check_claim`, `verify_ledger` and `status` answer anyone — and requires
 `Authorization: Bearer <token>` before `execute` or `reconcile` will act:
 
 ```bash
 CRUCIBLE_MCP_TOKEN=<long random secret> npm run dashboard
-claude mcp add crucible --transport http https://your-host/mcp   # anyone: read-only
+claude mcp add crucible --transport http https://your-host/mcp   # anyone can quote and route; executing needs the token
 ```
 
 Stateless by design: each request builds a fresh server and tears it down. The
@@ -261,7 +280,7 @@ A server or CI can supply the session as `BINANCE_MCP_TOKEN`; an API key in the
 environment is the second source; the public schedule is the last, and is never
 presented as anything else.
 
-The session is read-only here. Orders still go out on the signed execution path.
+The session is used only to read here. Orders still go out on the signed execution path.
 
 ## How it is built
 
