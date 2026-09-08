@@ -9,6 +9,7 @@ import type { Server } from "node:http";
 
 import { createServer } from "../src/dashboard/server.ts";
 import { renderPage } from "../src/dashboard/page.ts";
+import { renderLanding } from "../src/dashboard/landing.ts";
 import { ALL_RULES } from "../src/risk/rules.ts";
 
 let server: Server;
@@ -39,25 +40,37 @@ async function getJson(path: string): Promise<{ status: number; body: any }> {
 // The page
 // ---------------------------------------------------------------------------
 
-test("/ serves the page as HTML", async () => {
-  const res = await fetch(base + "/");
-  assert.equal(res.status, 200);
-  assert.match(res.headers.get("content-type") ?? "", /text\/html/);
+test("/ serves the landing page and /app the dashboard, both as HTML", async () => {
+  const landing = await fetch(base + "/");
+  assert.equal(landing.status, 200);
+  assert.match(landing.headers.get("content-type") ?? "", /text\/html/);
+  assert.equal(await landing.text(), renderLanding(), "the served bytes should be exactly what renderLanding produced");
 
-  const page = await res.text();
+  const app = await fetch(base + "/app");
+  assert.equal(app.status, 200);
+  const page = await app.text();
   assert.ok(page.includes("<title>Crucible</title>"), "the page should carry its title");
   assert.equal(page, renderPage(), "the served bytes should be exactly what renderPage produced");
 });
 
-test("the page loads nothing from outside this server", async () => {
-  const page = await (await fetch(base + "/")).text();
+test("neither page loads anything from outside this server", async () => {
+  for (const path of ["/", "/app"]) {
+    const page = await (await fetch(base + path)).text();
+    // Navigation links may point out; resources may not. A <link>, <script>,
+    // <img> or CSS url() reaching another host is a request the visitor did
+    // not choose to make, and the one thing this page promises not to do.
+    assert.ok(!/<(script|img|link|iframe)[^>]*(src|href)="(https?:)?\/\//i.test(page), `${path}: an element loads a remote resource`);
+    assert.ok(!page.includes("@import"), `${path}: no stylesheet may pull in another`);
+    assert.ok(!/url\(\s*['"]?(https?:)?\/\//i.test(page), `${path}: no CSS rule may fetch a remote asset`);
+  }
+});
 
-  assert.ok(!page.includes('src="http'), "no element may load a script or image over http");
-  assert.ok(!page.includes('href="http'), "no element may link out to a stylesheet or font");
-  assert.ok(!page.includes('src="//'), "no protocol-relative script source");
-  assert.ok(!page.includes('href="//'), "no protocol-relative stylesheet");
-  assert.ok(!page.includes("@import"), "no stylesheet may pull in another");
-  assert.ok(!/url\(\s*['"]?http/i.test(page), "no CSS rule may fetch a remote asset");
+test("/api/calibration grades the ledger, and says so honestly when it is empty", async () => {
+  const { status, body } = await getJson("/api/calibration");
+  assert.equal(status, 200);
+  assert.equal(typeof body.samples, "number");
+  assert.equal(typeof body.verdict, "string");
+  assert.equal(body.points, undefined, "the per-fill list stays on the CLI");
 });
 
 // ---------------------------------------------------------------------------

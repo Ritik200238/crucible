@@ -13,6 +13,7 @@
  */
 
 import { DEFAULT_SIZES } from "../sampler/run.ts";
+import { THEME } from "./theme.ts";
 
 export function renderPage(): string {
   // A complete document, not a fragment. Without a doctype a browser falls back
@@ -27,338 +28,94 @@ export function renderPage(): string {
 <meta name="color-scheme" content="dark">
 <title>Crucible</title>
 <style>
-/*
- * The look is deliberately quiet. This page reports what an order will cost to
- * within a hundredth of a basis point, and a design that shouts undermines the
- * one thing it is for. So: a near-black neutral ground, one restrained accent
- * used only where something is genuinely cheapest, and hairlines instead of
- * boxes. Everything that carries a number is set in a tabular monospace so
- * columns line up down the page and a change of magnitude is visible without
- * reading the digits.
- *
- * No webfont, on purpose. This document makes no request off the machine
- * serving it, which keeps it instant, offline-capable and untracked — worth
- * more than a typeface.
- */
-:root {
-  --bg: #0a0a0b;
-  --surface: #0f0f11;
-  --raised: #141417;
-  --line: rgba(255, 255, 255, 0.06);
-  --line-strong: rgba(255, 255, 255, 0.11);
-  --ink: #ececef;
-  --ink-2: #9d9da6;
-  --ink-3: #6a6a73;
-  --good: #4ec08a;
-  --good-dim: rgba(78, 192, 138, 0.13);
-  --bad: #e0705f;
-  --bad-dim: rgba(224, 112, 95, 0.13);
-  --warn: #d2a24c;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Inter, Roboto,
-    Helvetica, Arial, sans-serif;
-  --radius: 7px;
-}
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font: 400 13.5px/1.55 var(--sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  opacity: 0;
-  animation: fade 220ms ease-out forwards;
-}
-@keyframes fade { to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  body { animation: none; opacity: 1; }
-  * { transition: none !important; }
-}
-::selection { background: rgba(78, 192, 138, 0.24); }
-:focus-visible { outline: 1px solid var(--good); outline-offset: 2px; }
+${THEME}
 
-.wrap { max-width: 1180px; margin: 0 auto; padding: 40px 28px 96px; }
+/* ------------------------------------------------------------- app layout */
+.wrap { padding-top: 22px; padding-bottom: 80px; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+section { margin-bottom: 22px; }
+section > h2 { margin: 0; }
+section > .body { padding: 16px; }
 
-/* ---------------------------------------------------------------- header */
-
-header {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding-bottom: 20px;
-  margin-bottom: 34px;
-  border-bottom: 1px solid var(--line);
-}
-h1 {
-  font-size: 13px;
-  letter-spacing: 0.34em;
-  margin: 0;
-  font-weight: 600;
-  text-indent: 0.34em; /* balances the trailing letterspace */
-}
-.tagline { color: var(--ink-2); font-size: 13px; max-width: 62ch; }
-header .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-
-/* ---------------------------------------------------------------- sections */
-
-section { margin-bottom: 40px; }
-section > h2 {
-  margin: 0 0 14px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-section > h2 > span {
-  display: block;
-  margin-top: 5px;
-  font-size: 13px;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--ink-2);
-}
-.body {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px;
-}
-
-/* ---------------------------------------------------------------- controls */
-
-button {
-  font: 500 12px/1 var(--sans);
-  color: var(--ink-2);
-  background: transparent;
-  border: 1px solid var(--line-strong);
-  border-radius: 5px;
-  padding: 6px 11px;
-  cursor: pointer;
-  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
-}
-button:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.22); }
-button[aria-pressed="true"] {
-  color: var(--bg);
-  background: var(--ink);
-  border-color: var(--ink);
-}
-input[type="text"] {
-  font: 500 12px/1 var(--mono);
-  color: var(--ink);
-  background: var(--raised);
-  border: 1px solid var(--line-strong);
-  border-radius: 5px;
-  padding: 6px 9px;
-  width: 11ch;
-  text-transform: uppercase;
-}
-.controls { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; margin-bottom: 22px; }
+/* the page's own controls, in the theme's clothes */
+.controls { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
 .controls .group { display: flex; gap: 6px; align-items: center; }
-.controls label {
-  color: var(--ink-3);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
+.controls label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.controls button { font: 500 12px/1 var(--mono); color: var(--ink-2); background: transparent; border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+.controls button:hover { color: var(--ink); }
+.controls button[aria-pressed="true"] { color: var(--yellow); border-color: rgba(240, 185, 11, 0.5); background: rgba(240, 185, 11, 0.08); }
+.controls input[type="text"] { font: 500 12px/1 var(--mono); color: var(--ink); background: var(--raised); border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 9px; width: 11ch; text-transform: uppercase; }
+#reload { font: 500 12px/1 var(--mono); color: var(--ink-2); background: transparent; border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+#reload:hover { color: var(--ink); }
 
-/* ---------------------------------------------------------------- text */
-
-.n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
-.dim { color: var(--ink-2); }
-.dimmer { color: var(--ink-3); }
-.good { color: var(--good); }
-.bad { color: var(--bad); }
-.warn { color: var(--warn); }
 .note { color: var(--ink-2); margin: 8px 0 0; font-size: 12.5px; }
-.empty { color: var(--warn); margin: 6px 0; }
-
-/* The order line, and the verdict. Only the verdict carries a <strong>, which
-   is what makes it the one line on the page set at headline size. */
-.summary { margin: 0 0 12px; }
-.summary strong {
-  display: block;
-  font-size: 20px;
-  line-height: 1.32;
-  font-weight: 500;
-  letter-spacing: -0.012em;
-  margin-bottom: 3px;
-}
-.summary strong + .dim { font-size: 13px; }
-
-/* The answer, set apart from the working that follows it. */
-.verdict-line {
-  padding-bottom: 20px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--line);
-}
-.verdict-line strong { margin-bottom: 5px; }
-
-.kv { display: flex; gap: 8px; flex-wrap: wrap; color: var(--ink-3); margin: 0 0 16px; font-size: 12.5px; }
-/* Direct children only: the separator belongs between items, not between the
-   number spans inside one of them. */
-.kv > span + span::before { content: "·"; color: var(--line-strong); margin-right: 8px; }
-
-/* ---------------------------------------------------------------- tables */
-
-table { width: 100%; border-collapse: collapse; }
-th {
-  text-align: left;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  font-weight: 600;
-  padding: 0 10px 9px;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-tbody tr:last-child td { border-bottom: none; }
-th.num, td.num {
-  text-align: right;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.scroll { overflow-x: auto; }
+.empty { color: var(--amber); margin: 6px 0; }
 .detail { color: var(--ink-3); font-size: 12px; }
 
-/* ---------------------------------------------------------------- routes */
+.summary { margin: 0 0 12px; }
+.summary strong { display: block; font-size: 20px; line-height: 1.3; font-weight: 650; letter-spacing: -0.012em; margin-bottom: 3px; }
+.summary strong + .dim { font-size: 13px; }
+.verdict-line { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.kv { display: flex; gap: 8px; flex-wrap: wrap; color: var(--ink-3); margin: 0 0 14px; font-size: 12.5px; }
+.kv > span + span::before { content: "·"; color: var(--line-strong); margin-right: 8px; }
 
-.routes { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
-.route {
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 15px 16px 8px;
-  transition: border-color 140ms ease;
-}
-/* The cheapest route is the answer this page exists to give, so it is the only
-   thing on it wearing the accent. */
-.route.best {
-  border-color: rgba(78, 192, 138, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(78, 192, 138, 0.08);
-}
+.routes { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; }
+.route { background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px 8px; }
+.route.best { border-color: rgba(63, 185, 80, 0.45); box-shadow: inset 0 0 0 1px rgba(63, 185, 80, 0.08); }
 .route.off { opacity: 0.55; }
-/* Wraps rather than crushing the total when a route carries a badge. */
-.route-top { display: flex; align-items: baseline; gap: 9px; margin-bottom: 10px; flex-wrap: wrap; }
-.route-name { font-weight: 500; font-size: 13.5px; }
-.route-total {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 25px;
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-.route.best .route-total { color: var(--good); }
-.route .kv { margin-bottom: 12px; }
+.route-top { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; flex-wrap: wrap; }
+.route-name { font-weight: 600; font-size: 13.5px; }
+.route-total { margin-left: auto; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 600; letter-spacing: -0.015em; line-height: 1; }
+.route.best .route-total { color: var(--green); }
+.route .kv { margin-bottom: 10px; }
 .route table { border-top: 1px solid var(--line); }
 .route table td { border-bottom: none; padding: 5px 0 0; }
 .route table tr:nth-child(even) td { padding: 0 0 7px; }
-.route table td.num { color: var(--ink); }
 .route table td:first-child { color: var(--ink-2); }
+.badge { font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; border: 1px solid currentColor; border-radius: 999px; padding: 2px 7px; white-space: nowrap; opacity: 0.85; }
+.est { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); margin-left: 4px; }
 
-.badge {
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-weight: 600;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  padding: 2px 7px;
-  white-space: nowrap;
-  opacity: 0.85;
-}
-.est {
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--warn);
-  margin-left: 4px;
-}
-
-/* ---------------------------------------------------------------- rules */
-
-.rules {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 9px 28px;
-  margin-bottom: 18px;
-}
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 8px 28px; margin-bottom: 16px; }
 .rule { display: flex; gap: 10px; align-items: baseline; }
 .rule .dot { width: 5px; height: 5px; border-radius: 50%; flex: none; margin-top: 7px; }
-.rule.on .dot { background: var(--good); }
+.rule.on .dot { background: var(--green); }
 .rule.off .dot { background: var(--line-strong); }
 .rule .name { font-family: var(--mono); font-size: 12px; color: var(--ink); }
 .rule.off .name { color: var(--ink-3); }
 .rule .purpose { color: var(--ink-2); font-size: 12.5px; }
 .rule.off .purpose { color: var(--ink-3); }
 
-/* ---------------------------------------------------------------- ledger */
-
-/* The feed is a log, and a log rendered at full length turns the page into
-   one. It scrolls in place so the panel keeps its proportions and the sections
-   under it stay reachable. */
 #ledger .scroll { max-height: 420px; overflow-y: auto; }
-#ledger .scroll thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+#ledger .scroll thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
 .feed td:first-child { font-family: var(--mono); color: var(--ink-3); white-space: nowrap; }
 
-/* A scrollbar that belongs to the page rather than the operating system. */
-.scroll { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
-.scroll::-webkit-scrollbar { width: 9px; height: 9px; }
-.scroll::-webkit-scrollbar-track { background: transparent; }
-.scroll::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-  border-radius: 999px;
-  border: 2px solid var(--surface);
-}
-.scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
-.verdict {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 4px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  font-size: 10px;
-  text-transform: uppercase;
-}
-.verdict.ok { background: var(--good-dim); color: var(--good); }
-.verdict.no { background: var(--bad-dim); color: var(--bad); }
-
-/* ---------------------------------------------------------------- small screens */
-
-@media (max-width: 640px) {
-  .wrap { padding: 26px 16px 64px; }
-  header { gap: 10px; }
-  header .right { margin-left: 0; width: 100%; }
-  .body { padding: 14px; }
-  .routes { grid-template-columns: 1fr; }
-  .route-total { font-size: 22px; }
-  .summary strong { font-size: 17px; }
-}
+@media (max-width: 960px) { .kpis { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .kpis { grid-template-columns: 1fr; } .routes { grid-template-columns: 1fr; } .route-total { font-size: 21px; } .summary strong { font-size: 17px; } }
 </style>
 </head>
 <body>
 
 <div class="wrap">
-<header>
-  <h1>CRUCIBLE</h1>
-  <span class="tagline">Routes an order to whichever venue fills it cheapest, then proves the result.</span>
-  <span class="right">
-    <span id="loaded" class="dimmer n"></span>
+<div class="topbar">
+  <a class="mark" href="/"><span class="sq"></span><span><b>CRUCIBLE</b><small>SMART EXECUTION FOR BINANCE AGENTS</small></span></a>
+  <span id="chips" style="display:flex;gap:8px;flex-wrap:wrap"></span>
+  <nav>
+    <span id="loaded" class="dimmer n" style="font-size:11px"></span>
     <button id="reload" type="button">Reload</button>
-  </span>
-</header>
+    <a href="/" class="hide-sm">Overview</a>
+  </nav>
+</div>
 
-<section>
-  <h2>Live quote<span>Both venues priced at one instant, with every cost component broken out.</span></h2>
+<div class="wrap">
+<div class="kpis" id="kpis">
+  <div class="card kpi"><div class="label">Cheapest route</div><div class="big" id="kpi-route">&ndash;</div><div class="sub" id="kpi-route-sub">at the selected size</div></div>
+  <div class="card kpi"><div class="label">Edge on this order</div><div class="big" id="kpi-edge">&ndash;</div><div class="sub" id="kpi-edge-sub">against the next best route</div></div>
+  <div class="card kpi"><div class="label">Real fills graded</div><div class="big" id="kpi-fills">&ndash;</div><div class="sub" id="kpi-fills-sub">from the signed ledger</div></div>
+  <div class="card kpi"><div class="label">Venue samples</div><div class="big" id="kpi-samples">&ndash;</div><div class="sub" id="kpi-samples-sub">live comparisons recorded</div></div>
+</div>
+
+<section class="card">
+  <div class="head"><span class="label">Live quote</span><span class="meta">both venues, one instant, every cost component</span></div>
   <div class="body">
     <div class="controls">
       <span class="group"><label for="symbol">pair</label><input id="symbol" type="text" value="BNBUSDT" spellcheck="false" autocomplete="off"></span>
@@ -369,18 +126,18 @@ th.num, td.num {
   </div>
 </section>
 
-<section>
-  <h2>Evidence<span>Which venue was actually cheaper, per pair and per order size.</span></h2>
+<section class="card">
+  <div class="head"><span class="label">Evidence</span><span class="meta">which venue was actually cheaper, per pair and size</span></div>
   <div class="body" id="evidence"></div>
 </section>
 
-<section>
-  <h2>Risk policy<span>Every rule an order clears before it can be sent, and its limit.</span></h2>
+<section class="card">
+  <div class="head"><span class="label">Risk policy</span><span class="meta">every rule an order clears, and its limit</span></div>
   <div class="body" id="policy"></div>
 </section>
 
-<section>
-  <h2>Ledger<span>Every decision, hash-chained and signed. Verify it, then read what it says.</span></h2>
+<section class="card">
+  <div class="head"><span class="label">Ledger</span><span class="meta">hash-chained, signed, verified on load</span></div>
   <div class="body" id="ledger"></div>
 </section>
 </div>
@@ -540,6 +297,20 @@ th.num, td.num {
     // and printing it under the three cards made the reader assemble it
     // themselves from a grid of numbers first.
     el("quote").innerHTML = head + verdict + '<div class="routes">' + cards + "</div>";
+
+    // The tiles at the top say the answer before the panel explains it.
+    if (ranked.length > 0) {
+      el("kpi-route").textContent = routeLabel(ranked[0]);
+      el("kpi-route-sub").textContent = bps(ranked[0].totalBps) + " all-in at " + usd(quote.notionalUsd);
+    }
+    if (ranked.length > 1) {
+      el("kpi-edge").textContent = bps(quote.edgeBps);
+      el("kpi-edge").className = "big " + (quote.edgeBps > 0 ? "good" : "");
+      el("kpi-edge-sub").textContent = usd((quote.edgeBps / 10000) * quote.notionalUsd) + " against " + routeLabel(ranked[1]);
+    }
+    el("chips").innerHTML =
+      '<span class="chip' + (quote.commission.source === "account" ? " on" : "") + '">fees ' +
+      esc(quote.commission.source === "account" ? "account" : "VIP 0") + "</span>";
   }
 
   function loadQuote() {
@@ -553,6 +324,17 @@ th.num, td.num {
   // -------------------------------------------------------------------------
   // Evidence
   // -------------------------------------------------------------------------
+
+  function renderKpisFromReports() {
+    load("/api/calibration").then(function (c) {
+      el("kpi-fills").textContent = String(c.samples);
+      el("kpi-fills-sub").textContent = c.samples > 0 ? "mean error " + bps(c.meanErrorBps) : "no execution graded yet";
+    }).catch(function () {});
+    load("/api/evidence").then(function (e) {
+      el("kpi-samples").textContent = String(e.total);
+      el("kpi-samples-sub").textContent = e.spanHours.toFixed(1) + " hours, cost model " + e.model;
+    }).catch(function () {});
+  }
 
   function renderEvidence(report) {
     var target = el("evidence");
@@ -744,6 +526,7 @@ th.num, td.num {
   }
 
   function loadAll() {
+    renderKpisFromReports();
     el("loaded").textContent = "loading";
     return Promise.all([
       loadQuote(),

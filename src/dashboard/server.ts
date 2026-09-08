@@ -33,6 +33,8 @@ import { verifyLedger } from "../ledger/verify.ts";
 import { BinanceError } from "../venues/binance.ts";
 import { OnchainError } from "../venues/onchain.ts";
 import { renderPage } from "./page.ts";
+import { renderLanding } from "./landing.ts";
+import { calibration } from "../exec/calibration.ts";
 import { handleMcpRequest } from "../mcp/http.ts";
 import type { CostComponent, Side } from "../types.ts";
 
@@ -71,10 +73,11 @@ function publicPath(full: string): string {
 const RECENT_RECORDS = 50;
 
 /**
- * The page never changes between requests — every figure on it arrives by
- * fetch — so it is built once at startup and served from memory.
+ * Neither page changes between requests — every figure on them arrives by
+ * fetch — so both are built once at startup and served from memory.
  */
 const PAGE = Buffer.from(renderPage(), "utf8");
+const LANDING = Buffer.from(renderLanding(), "utf8");
 
 /** A request the caller can fix by asking differently. Answered with 400. */
 class BadRequest extends Error {
@@ -87,6 +90,22 @@ class BadRequest extends Error {
 // ---------------------------------------------------------------------------
 // Payloads
 // ---------------------------------------------------------------------------
+
+/**
+ * The model's grade, from the same signed ledger everything else reads. Points
+ * are left out: the page wants the summary, and the per-fill list is on the
+ * CLI for anyone who wants to check the summary against it.
+ */
+function calibrationPayload() {
+  let records: LedgerRecord[] = [];
+  try {
+    records = new Ledger().read();
+  } catch {
+    // An unreadable ledger grades nothing; the report says so itself.
+  }
+  const { points: _points, ...summary } = calibration(records);
+  return summary;
+}
 
 function evidencePayload(): EvidenceReport {
   const rows = readSamples();
@@ -350,6 +369,23 @@ function sendPage(res: ServerResponse): void {
   res.end(PAGE);
 }
 
+function sendLanding(res: ServerResponse): void {
+  res.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    "content-length": LANDING.byteLength,
+    "cache-control": "no-store",
+    // The page claims to make no external request. This is that claim enforced
+    // by the browser rather than asserted in a comment: nothing may be loaded
+    // from anywhere, and the only connections allowed are back to this server.
+    "content-security-policy":
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+      "connect-src 'self'; base-uri 'none'; form-action 'none'",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+  });
+  res.end(LANDING);
+}
+
 function statusFor(err: unknown): number {
   if (err instanceof BadRequest) return 400;
   // A venue that cannot be reached is not this server's fault, and calling it a
@@ -397,7 +433,14 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
   try {
     switch (path) {
       case "/":
+        sendLanding(res);
+        return;
+      case "/app":
+      case "/app/":
         sendPage(res);
+        return;
+      case "/api/calibration":
+        sendJson(res, 200, calibrationPayload());
         return;
       case "/api/evidence":
         sendJson(res, 200, evidencePayload());
@@ -414,8 +457,8 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
       default:
         sendJson(res, 404, {
           error:
-            `Nothing is served at ${path}. This server answers / for the page, ` +
-            `/api/quote, /api/evidence, /api/policy and /api/ledger for its data, and POST /mcp for agents.`,
+            `Nothing is served at ${path}. This server answers / and /app for its pages, ` +
+            `/api/quote, /api/evidence, /api/calibration, /api/policy and /api/ledger for its data, and POST /mcp for agents.`,
         });
         return;
     }
