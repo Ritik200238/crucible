@@ -30,3 +30,6 @@ dist/
 # Screenshots from design review.
 .playwright-mcp/
 *.png
+
+# The rendered video is a build product; the build script is what is kept.
+demo/video/*.mp4
