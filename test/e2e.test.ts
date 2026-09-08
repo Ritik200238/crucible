@@ -8,7 +8,7 @@ import { DEFAULT_POLICY } from "../src/config.ts";
 import { priceAllRoutes } from "../src/cost/model.ts";
 import { measuredImpactBps, route, RouteError } from "../src/decide/router.ts";
 import { deriveState } from "../src/risk/state.ts";
-import { execute, ExecutionError, UnconfirmedError } from "../src/exec/execute.ts";
+import { execute, ExecutionError, reconcile, UnconfirmedError } from "../src/exec/execute.ts";
 import type { Credentials } from "../src/exec/binance-rest.ts";
 import { Ledger } from "../src/ledger/chain.ts";
 import { verifyChain, verifyLedger } from "../src/ledger/verify.ts";
@@ -214,6 +214,13 @@ interface VenueOptions {
   placingResponseClaimsFilled?: boolean;
   /** Answer POST /api/v3/order with this rejection instead of accepting it. */
   rejectOrder?: { status: number; code: number; msg: string };
+  /**
+   * Accept the order and then lose the reply on the way back.
+   *
+   * The worst case there is: the order is live, and the only thing naming it
+   * that ever reached this side is the client id chosen before the send.
+   */
+  dropOrderResponse?: boolean;
 }
 
 interface SimulatedVenue {
@@ -308,6 +315,9 @@ function simulatedVenue(opts: VenueOptions = {}): SimulatedVenue {
       orders.set(orderId, order);
       reads.set(orderId, 0);
 
+      // The order exists on the venue. The caller simply never hears about it.
+      if (opts.dropOrderResponse) throw new TypeError("fetch failed");
+
       const answer: RawOrder = opts.placingResponseClaimsFilled
         ? {
             ...order,
@@ -321,7 +331,12 @@ function simulatedVenue(opts: VenueOptions = {}): SimulatedVenue {
     }
 
     if (method === "GET" && url.pathname === "/api/v3/order") {
-      const orderId = Number(url.searchParams.get("orderId"));
+      // Binance documents orderId and origClientOrderId as alternatives here,
+      // and the second is the only one available after a lost reply.
+      const byClientId = url.searchParams.get("origClientOrderId");
+      const orderId = byClientId
+        ? ([...orders.values()].find((o) => o.clientOrderId === byClientId)?.orderId ?? -1)
+        : Number(url.searchParams.get("orderId"));
       const order = orders.get(orderId);
       if (!order) return json({ code: -2013, msg: "Order does not exist." }, 400);
 
@@ -627,7 +642,7 @@ test("an order that never leaves NEW is reported as unresolved, not as a fill", 
   );
   assert.deepEqual(
     ledger.read().map((r) => r.kind),
-    ["execution.started", "execution.submitted", "execution.unconfirmed"],
+    ["execution.started", "execution.submitted", "execution.identified", "execution.unconfirmed"],
   );
 
   // The unresolved order holds its notional against the caps. Freeing it on a
@@ -725,20 +740,32 @@ test("a completed execution leaves a signed, verifiable trail of records", async
   const records = ledger.read();
   assert.deepEqual(
     records.map((r) => r.kind),
-    ["execution.started", "execution.submitted", "execution.completed"],
+    ["execution.started", "execution.submitted", "execution.identified", "execution.completed"],
   );
 
   const started = records[0]!.payload as { venue: string; predictedBps: number };
   assert.equal(started.venue, "BINANCE_SPOT");
   closeTo(started.predictedBps, plan.chosen.totalBps);
 
-  // The moment the exchange accepted it, with the exchange's own id, so a
-  // crash between here and the read-back leaves a record of what was sent.
-  const submitted = records[1]!.payload as { reference: string; quoteQty: number };
-  assert.equal(submitted.reference, String(venue.placed[0]!.orderId));
+  // Written before the send, so a crash anywhere after this point still leaves
+  // a record of an order that may be live. It carries no exchange id yet —
+  // there is none to carry — but it carries the id we chose, which is enough
+  // to find the order again.
+  const submitted = records[1]!.payload as {
+    reference: string | null;
+    clientOrderId: string;
+    quoteQty: number;
+  };
+  assert.equal(submitted.reference, null);
+  assert.equal(submitted.clientOrderId, venue.placed[0]!.clientOrderId);
   closeTo(submitted.quoteQty, plan.baseQty * DEEP.mid);
 
-  const completed = records[2]!.payload as { realisedBps: number | null; errorBps: number | null };
+  // The exchange's own id arrives separately, tied back by the client id.
+  const identified = records[2]!.payload as { clientOrderId: string; reference: string };
+  assert.equal(identified.clientOrderId, submitted.clientOrderId);
+  assert.equal(identified.reference, String(venue.placed[0]!.orderId));
+
+  const completed = records[3]!.payload as { realisedBps: number | null; errorBps: number | null };
   closeTo(completed.realisedBps, receipt.realisedBps);
   closeTo(completed.errorBps, receipt.errorBps);
 
@@ -746,8 +773,62 @@ test("a completed execution leaves a signed, verifiable trail of records", async
 
   const onDisk = verifyLedger({ dir: ledger.paths.dir });
   assert.equal(onDisk.ok, true);
-  assert.equal(onDisk.records, 3);
+  assert.equal(onDisk.records, 4);
   assert.equal(onDisk.signatureValid, true);
+});
+
+test("an order whose reply is lost is unresolved, and is found again by the id we chose", async () => {
+  // The dangerous case. The order reached the book; the response carrying the
+  // exchange's id did not come back. Nothing on this side knows the order id,
+  // and treating that as a failure invites a retry that doubles the position.
+  process.env.CRUCIBLE_LIVE = "1";
+  const plan = route({ intent: BUY_TWO, snapshot: DEEP, policy: LIVE_POLICY });
+  const venue = simulatedVenue({ dropOrderResponse: true });
+  const { ledger, run } = pipeline("lost-reply", venue, LIVE_POLICY, plan);
+
+  let thrown: unknown;
+  await run().catch((err: unknown) => {
+    thrown = err;
+  });
+
+  assert.ok(
+    thrown instanceof UnconfirmedError,
+    `a lost reply must not be reported as a failure, got ${String(thrown)}`,
+  );
+  assert.match(thrown.message, /Do not retry blind/);
+
+  const records = ledger.read();
+  assert.deepEqual(
+    records.map((r) => r.kind),
+    ["execution.started", "execution.submitted", "execution.unconfirmed"],
+  );
+  // No identification and no rejection: the exchange said nothing either way.
+  const submitted = records[1]!.payload as { reference: string | null; clientOrderId: string };
+  assert.equal(submitted.reference, null);
+  assert.match(submitted.clientOrderId, /^cru-/);
+
+  // The notional is held against the caps while the order's fate is unknown.
+  const state = deriveState(records, TAKEN_AT);
+  assert.equal(state.unresolved.length, 1);
+  closeTo(state.notionalTodayUsd, plan.baseQty * DEEP.mid);
+
+  // And the order can still be read back, by the only handle that survived.
+  const resolved = await reconcile({
+    planId: plan.id,
+    ledger,
+    binance: { baseUrl: VENUE_URL, credentials: CREDENTIALS, fetchImpl: venue.fetchImpl },
+    filters: DEEP.filters,
+  });
+  assert.equal(resolved.outcome, "filled");
+  assert.equal(resolved.fills.length, 1);
+  closeTo(resolved.fills[0]!.filledBaseQty, plan.baseQty);
+  assert.ok(
+    venue.calls.some((c) => c.path === "/api/v3/order" && c.params.get("origClientOrderId")),
+    "the read-back has to go through the client id, because there was no other id",
+  );
+
+  // Once resolved it stops holding a cap.
+  assert.equal(deriveState(ledger.read(), TAKEN_AT).unresolved.length, 0);
 });
 
 test("a rejected order is recorded verbatim and leaves the chain intact", async () => {
@@ -771,15 +852,31 @@ test("a rejected order is recorded verbatim and leaves the chain intact", async 
     "POST /api/v3/order",
   ]);
 
+  // The order is written down before it is sent, so the record exists even for
+  // one that never entered the book. What makes "failed" safe to claim here is
+  // the rejection between them: the exchange answered, so nothing is live.
   const records = ledger.read();
   assert.deepEqual(
     records.map((r) => r.kind),
-    ["execution.started", "execution.failed"],
+    ["execution.started", "execution.submitted", "execution.rejected", "execution.failed"],
+  );
+  assert.equal(
+    (records[1]!.payload as { reference: string | null }).reference,
+    null,
+    "no exchange id exists yet at the moment of writing",
+  );
+  assert.equal(
+    (records[1]!.payload as { clientOrderId: string }).clientOrderId,
+    (records[2]!.payload as { clientOrderId: string }).clientOrderId,
+    "the rejection has to name the order that was written down",
   );
   assert.match(
-    (records[1]!.payload as { reason: string }).reason,
+    (records[3]!.payload as { reason: string }).reason,
     /Account has insufficient balance/,
   );
+  // A refused order holds nothing against the caps.
+  const state = deriveState(records, TAKEN_AT);
+  assert.equal(state.unresolved.length, 0);
   assert.equal(verifyChain(records).ok, true);
   assert.equal(verifyLedger({ dir: ledger.paths.dir }).ok, true);
 });

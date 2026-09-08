@@ -64,11 +64,22 @@ export class UnconfirmedError extends ExecutionError {
   }
 }
 
-/** What was sent to a venue, recorded the moment it was accepted. */
+/** What was sent to a venue, recorded before it left rather than after. */
 export interface SubmittedOrder {
   venue: Venue;
-  /** The venue's own identifier: an exchange order id, or a wallet swap order id. */
-  reference: string;
+  /**
+   * The venue's own identifier: an exchange order id, or a wallet swap order id.
+   *
+   * Null until the venue answers. A request that times out on the way back
+   * leaves the order live and this field empty, which is exactly the case
+   * `clientOrderId` exists to resolve.
+   */
+  reference: string | null;
+  /**
+   * The id we chose before sending, so the order can be found again when the
+   * venue's own id never reached us.
+   */
+  clientOrderId: string;
   baseQty: number;
   /** Notional at the snapshot mid. Reserved against the caps until resolved. */
   quoteQty: number;
@@ -83,7 +94,15 @@ export interface SubmittedOrder {
  * whether a failure is a failure or an unknown.
  */
 interface Progress {
+  /** Called before the request leaves, because after is already too late. */
   submitted(order: SubmittedOrder): void;
+  /** The venue answered and named the order. */
+  identified(clientOrderId: string, reference: string): void;
+  /**
+   * The venue answered with a refusal, so the order definitively does not
+   * exist. Only a reply proves this — a timeout proves nothing.
+   */
+  rejected(clientOrderId: string): void;
   confirmed(fill: ConfirmedFill): void;
 }
 
@@ -193,29 +212,46 @@ async function executeBinance(opts: ExecuteOptions, progress: Progress): Promise
     const qty = roundToStep(child.baseQty, snapshot.filters.stepSize);
     if (qty <= 0) continue;
 
+    // Chosen here, before anything is sent, and chosen deterministically. This
+    // is the only handle on the order that exists on both sides of a request
+    // that fails on the way back.
+    const clientOrderId = `cru-${plan.id}-${child.index}`.slice(0, 36);
     const params = {
       symbol: snapshot.symbol,
       side: plan.intent.side,
       type: "MARKET" as const,
       quantity: qty,
       // Ties the exchange's own record back to the plan that authorised it.
-      newClientOrderId: `cru-${plan.id}-${child.index}`.slice(0, 36),
+      newClientOrderId: clientOrderId,
     };
 
     // Binance validates against its own filters first. Cheaper to be refused
     // here than to have an order rejected after it has been counted.
     await client.testOrder(params);
 
-    const placed = await client.newOrder(params);
-    // From here the order exists on the exchange whatever happens next. The
-    // read-back can time out, the network can drop, the process can die; none
-    // of those un-send it, so it is recorded as sent before any of them can.
+    // Recorded before the send, not after. A response that never arrives does
+    // not un-send the order, so the window between "leaving" and "acknowledged"
+    // has to be a state we have written down rather than one we can only infer.
     progress.submitted({
       venue: "BINANCE_SPOT",
-      reference: String(placed.orderId),
+      reference: null,
+      clientOrderId,
       baseQty: qty,
       quoteQty: qty * snapshot.mid,
     });
+
+    let placed;
+    try {
+      placed = await client.newOrder(params);
+    } catch (err) {
+      // A reply carrying a status is the exchange saying no: the order was
+      // never accepted and there is nothing live to reconcile. A transport
+      // failure says nothing at all, and that order stays unresolved.
+      if (err instanceof BinanceApiError && err.status !== null) progress.rejected(clientOrderId);
+      throw err;
+    }
+    progress.identified(clientOrderId, String(placed.orderId));
+
     const settled = await client.awaitTerminal(snapshot.symbol, placed.orderId);
     const trades = await client.myTrades(snapshot.symbol, placed.orderId);
     const fill = toConfirmedFill(settled, trades, snapshot.filters);
@@ -273,9 +309,15 @@ async function executeOnchain(opts: ExecuteOptions, progress: Progress): Promise
   });
   // The wallet has the swap and will broadcast it on its own schedule. Whether
   // this process is still around to see the result changes nothing on-chain.
+  //
+  // Unlike the exchange leg, the id here is the wallet's, not ours: the CLI has
+  // no client-supplied key, so a swap submission that times out on the way back
+  // leaves nothing to look the order up by. That window is real and cannot be
+  // closed from this side; `baw market-order list` is the way out of it.
   progress.submitted({
     venue: "ONCHAIN",
     reference: orderId,
+    clientOrderId: orderId,
     baseQty: plan.baseQty,
     quoteQty: plan.quoteQty,
   });
@@ -444,6 +486,8 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
   // between the two lists is the set of orders whose outcome is unknown.
   const submitted: SubmittedOrder[] = [];
   const confirmed: ConfirmedFill[] = [];
+  /** Client ids the venue explicitly refused, so they are known not to exist. */
+  const rejected = new Set<string>();
   const progress: Progress = {
     submitted: (order) => {
       submitted.push(order);
@@ -452,8 +496,27 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
         fingerprint: plan.fingerprint,
         venue: order.venue,
         reference: order.reference,
+        clientOrderId: order.clientOrderId,
         baseQty: order.baseQty,
         quoteQty: order.quoteQty,
+      });
+    },
+    identified: (clientOrderId, reference) => {
+      const order = submitted.find((o) => o.clientOrderId === clientOrderId);
+      if (order) order.reference = reference;
+      record("execution.identified", {
+        planId: plan.id,
+        fingerprint: plan.fingerprint,
+        clientOrderId,
+        reference,
+      });
+    },
+    rejected: (clientOrderId) => {
+      rejected.add(clientOrderId);
+      record("execution.rejected", {
+        planId: plan.id,
+        fingerprint: plan.fingerprint,
+        clientOrderId,
       });
     },
     confirmed: (fill) => confirmed.push(fill),
@@ -475,7 +538,9 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
     // the case where nothing reached a venue, because the two call for opposite
     // responses: a failure can be retried and an unresolved order must not be.
     const unresolved = submitted.filter(
-      (s) => !confirmed.some((f) => f.reference === s.reference),
+      (s) =>
+        !rejected.has(s.clientOrderId) &&
+        !(s.reference !== null && confirmed.some((f) => f.reference === s.reference)),
     );
 
     if (unresolved.length === 0) {
@@ -632,22 +697,40 @@ export async function reconcile(opts: ReconcileOptions): Promise<Reconciliation>
         ...(opts.binance.fetchImpl ? { fetchImpl: opts.binance.fetchImpl } : {}),
       });
       await client.syncClock();
-      const current = await client.queryOrder(symbol, Number(order.reference));
+      // The exchange id is missing exactly when the response carrying it never
+      // arrived — the case this whole path exists for. The client id was chosen
+      // before the send and is always there, so it is the fallback.
+      let current;
+      try {
+        current =
+          order.reference !== null
+            ? await client.queryOrder(symbol, Number(order.reference))
+            : await client.queryOrderByClientId(symbol, order.clientOrderId);
+      } catch (err) {
+        // -2013 is Binance saying it has no such order. For an order we can
+        // only name by our own id, that is the answer: it never reached the
+        // book, so nothing is outstanding and nothing must be retried blind.
+        if (err instanceof BinanceApiError && err.code === -2013) continue;
+        throw err;
+      }
+      const label = order.reference ?? order.clientOrderId;
       const terminal = new Set(["FILLED", "CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"]);
       if (!terminal.has(current.status)) {
-        stillOpen.push(order.reference);
+        stillOpen.push(label);
         continue;
       }
       const filters =
         opts.filters ??
         (await (opts.filtersLookup ?? fetchSymbolFilters)(symbol));
-      const trades = await client.myTrades(symbol, Number(order.reference));
+      // myTrades keys on the exchange's own order id, which the lookup above
+      // has now supplied even when we arrived holding only the client id.
+      const trades = await client.myTrades(symbol, current.orderId);
       fills.push(toConfirmedFill(current, trades, filters));
     } else {
       const lookup = opts.swapLookup ?? ((id: string) => getSwapOrder(id));
-      const swap = await lookup(order.reference);
+      const swap = await lookup(order.reference ?? order.clientOrderId);
       if (swap.status !== "FINISHED" && swap.status !== "FAILED") {
-        stillOpen.push(order.reference);
+        stillOpen.push(order.reference ?? order.clientOrderId);
         continue;
       }
       fills.push(swapToFill(swap, side === "BUY"));

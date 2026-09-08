@@ -329,6 +329,20 @@ export class BinanceRest {
     return this.request<OrderResponse>("GET", "/api/v3/order", { symbol, orderId }, true);
   }
 
+  /**
+   * Find an order by the id we chose for it, rather than the one Binance
+   * assigned.
+   *
+   * This is the only way to answer "did it land?" after a request that timed
+   * out on the way back: the exchange's own order id arrives in the response
+   * that never came, but the client id was ours before the order was sent.
+   * `GET /api/v3/order` documents orderId and origClientOrderId as
+   * alternatives, and this takes the second.
+   */
+  async queryOrderByClientId(symbol: string, origClientOrderId: string): Promise<OrderResponse> {
+    return this.request<OrderResponse>("GET", "/api/v3/order", { symbol, origClientOrderId }, true);
+  }
+
   async myTrades(symbol: string, orderId: number): Promise<TradeRecord[]> {
     return this.request<TradeRecord[]>("GET", "/api/v3/myTrades", { symbol, orderId }, true);
   }
