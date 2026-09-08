@@ -443,6 +443,18 @@ export const maxImpact: Rule = {
     }
     if (ctx.impactBps === undefined) return null;
 
+    // An order larger than the whole visible book has no finite impact to
+    // report. Saying "Infinity bps" would be technically what the number holds
+    // and useless to read, so the condition gets its own sentence.
+    if (!Number.isFinite(ctx.impactBps)) {
+      return block(
+        this.name,
+        `The visible order book cannot fill this size at all, so its cost cannot be measured. ` +
+          `Trade smaller, or split it across time.`,
+        { impactBps: null, capBps: cap, bookExhausted: true },
+      );
+    }
+
     if (ctx.impactBps <= cap) {
       return pass(
         this.name,

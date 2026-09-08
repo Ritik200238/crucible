@@ -15,6 +15,9 @@ import { BinanceError } from "./venues/binance.ts";
 import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
+import { verifyLedger } from "./ledger/verify.ts";
+import { credentialsFromEnv, DEMO, MAINNET } from "./exec/binance-rest.ts";
+import { walletStatus, walletVersion } from "./exec/wallet.ts";
 import { summarise } from "./sampler/analyse.ts";
 import { ALL_RULES } from "./risk/rules.ts";
 import { evaluate } from "./risk/engine.ts";
@@ -324,6 +327,86 @@ function cmdSamples(args: Map<string, string>): number {
   return 0;
 }
 
+/**
+ * What can actually execute, right now.
+ *
+ * Reported before anything is promised. A router that quotes a venue it cannot
+ * reach is worse than one that quotes nothing, so the missing pieces are named
+ * plainly rather than left to fail at execution time.
+ */
+async function cmdStatus(args: Map<string, string>): Promise<number> {
+  const { policy, source } = loadPolicy(args.get("config"));
+  console.log();
+  console.log(`  ${c.bold("CRUCIBLE STATUS")}`);
+  console.log(c.dim(`  ${source}`));
+  console.log();
+
+  const baseUrl = process.env.CRUCIBLE_BINANCE_BASE ?? DEMO;
+  let binanceLine: string;
+  try {
+    credentialsFromEnv();
+    binanceLine =
+      `${c.green("●")} Binance      credentials present, pointing at ${baseUrl}` +
+      (baseUrl === MAINNET ? c.red("  (LIVE EXCHANGE)") : c.dim("  (practice)"));
+  } catch {
+    binanceLine = `${c.yellow("○")} Binance      ${c.dim("no credentials — quoting works, the exchange leg cannot execute")}`;
+  }
+  console.log(`  ${binanceLine}`);
+
+  const version = await walletVersion();
+  if (!version) {
+    console.log(
+      `  ${c.yellow("○")} Wallet       ${c.dim("CLI not installed — quoting works, the on-chain leg cannot execute")}`,
+    );
+  } else {
+    try {
+      const session = await walletStatus();
+      console.log(
+        session.connected
+          ? `  ${c.green("●")} Wallet       CLI ${version}, session connected`
+          : `  ${c.yellow("○")} Wallet       ${c.dim(`CLI ${version}, no session — run: baw auth signin --json`)}`,
+      );
+    } catch (err) {
+      console.log(`  ${c.yellow("○")} Wallet       ${c.dim(`CLI ${version}, ${(err as Error).message}`)}`);
+    }
+  }
+
+  const ledger = verifyLedger();
+  console.log(
+    ledger.records === 0
+      ? `  ${c.dim("○")} Ledger       ${c.dim("no decisions recorded yet")}`
+      : ledger.ok
+        ? `  ${c.green("●")} Ledger       ${ledger.records} records, chain verified${ledger.signatureValid ? ", signature valid" : ""}`
+        : `  ${c.red("✗")} Ledger       ${c.red(`broken at record ${ledger.brokenAt}: ${ledger.reason}`)}`,
+  );
+
+  const live = isLiveEnabled(policy);
+  console.log(
+    live
+      ? `  ${c.red("●")} Execution    ${c.bold("ENABLED")} — orders will be transmitted`
+      : `  ${c.green("○")} Execution    ${c.dim(`disabled (mode "${policy.mode}", CRUCIBLE_LIVE ${process.env.CRUCIBLE_LIVE === "1" ? "set" : "unset"})`)}`,
+  );
+  console.log();
+  return 0;
+}
+
+function cmdVerify(): number {
+  const r = verifyLedger();
+  console.log();
+  if (r.records === 0) {
+    console.log(c.dim("  No decisions recorded yet, so there is nothing to verify."));
+    console.log();
+    return 0;
+  }
+  console.log(
+    r.ok
+      ? `  ${c.green("✓")} ${r.records} records, chain verified, signature ${r.signatureValid ? c.green("valid") : c.yellow("not checked")}.`
+      : `  ${c.red("✗")} Verification FAILED at record ${r.brokenAt}: ${r.reason}`,
+  );
+  console.log();
+  return r.ok ? 0 : 1;
+}
+
 async function cmdSample(): Promise<number> {
   console.log(c.dim("\n  Sweeping every symbol and size once...\n"));
   const { ok, failed } = await sampleSweep();
@@ -337,7 +420,9 @@ const HELP = `
   ${c.bold("COMMANDS")}
     quote      Price an order on every venue, no decision
     route      Choose a venue and style, and run the risk engine
+    status     What can actually execute right now
     policy     Show which rules are active
+    verify     Recompute the decision ledger and check its signature
     sample     Take one evidence sample across all symbols and sizes
     samples    Summarise the evidence collected so far
 
@@ -365,6 +450,8 @@ async function main(): Promise<number> {
       case "quote": return await cmdQuote(args);
       case "route": return await cmdRoute(args);
       case "policy": return cmdPolicy(args);
+      case "status": return await cmdStatus(args);
+      case "verify": return cmdVerify();
       case "sample": return await cmdSample();
       case "samples": return cmdSamples(args);
       case undefined:
