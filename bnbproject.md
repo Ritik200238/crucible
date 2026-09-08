@@ -137,12 +137,22 @@ tried in order, and every quote says which one it used:
 3. **The public VIP 0 schedule**, labelled as such on every report, with the
    reason the real rate was not available.
 
-The Agent OS client speaks the documented transport. The server's hidden-tool
-mechanism (`tool_execute`) is written from observation, not from a session on
-this machine, and is marked NOT VERIFIED in the source. If any of it is wrong
-the result is a labelled fallback, never a wrong number presented as the
+The Agent OS client speaks the documented transport, and the hidden-tool
+mechanism was verified against the live server on 2026-09-08 with the
+operator's own session: `tools/list` returned 50 tools, the commission tool was
+not among them, and `tool_execute` with `spot.accountCommission` answered with
+the documented REST shape. `status` then read the account's real rate: maker
+10.00 bps, taker 10.00 bps, BNB discount on. If a later change breaks any of
+this the result is a labelled fallback, never a wrong number presented as the
 account's — which the tests pin by breaking the decoder, the auth header and
 the cache in turn.
+
+One thing is deliberately left unapplied: the BNB fee discount. The account
+reports a factor of 0.75; Binance's docs caption the same field "reduced by
+this rate" beside examples of both 0.25 and 0.75, and its published spot
+discount is 25%. The reading that fits is "fraction paid", making the effective
+taker rate 7.50 bps, but that is an inference. A real fill's commission is the
+only test, so the quote uses the standard rate and says why.
 
 ### Stage 2 — the cost model
 

@@ -20,13 +20,21 @@
  *     of `GET /api/v3/account/commission` (`standardCommission.maker/taker`,
  *     `discount`), which the MCP tool wraps.
  *   - The server runs in a "meta" mode: `tools/list` returns a subset, and the
- *     rest are reached by `tool_search` and invoked through `tool_execute` with
- *     `{ toolName, arguments }`. The `Accept` header must list both JSON and
- *     event-stream. These are NOT VERIFIED from this machine: the endpoint
- *     answers 401 until a user has authorised it, and no session has been
- *     established here. The code is written so that if any of them is wrong
- *     the result is a labelled fallback to the public schedule, never a wrong
- *     number presented as the account's.
+ *     rest are invoked through `tool_execute` with `{ toolName, arguments }`.
+ *     Verified against the live server on 2026-09-08 with a user's session:
+ *     `tools/list` returned 50 tools, none of them the commission tool;
+ *     `tool_execute` with `spot.accountCommission` answered with the documented
+ *     REST shape (`standardCommission`, `specialCommission`, `taxCommission`,
+ *     `discount`). The code is still written so that if a later change breaks
+ *     any of this, the result is a labelled fallback to the public schedule,
+ *     never a wrong number presented as the account's.
+ *   - What is NOT settled: the meaning of `discount.discount`. This account
+ *     returns 0.75; the docs show 0.25 in one example and 0.75 in another, both
+ *     captioned "standard commission is reduced by this rate". Binance's
+ *     published spot discount for paying fees in BNB is 25%, which makes 0.75
+ *     the fraction paid — but that is an inference, and the discount is not
+ *     applied to any quote until a real fill's commission confirms which way
+ *     the field reads.
  */
 
 import { readFileSync } from "node:fs";

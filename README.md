@@ -239,6 +239,8 @@ claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp
 From then on every quote, route and dashboard figure is priced at **your
 account's rate for that symbol**, read through the session your client
 established — `account/commission`, the same figure the exchange charges you.
+Verified against the live server: the commission tool is not in the 50 the
+server lists, and Crucible reaches it through Binance's `tool_execute`.
 `status` shows which source is in use and, when it is the fallback, exactly why.
 A server or CI can supply the session as `BINANCE_MCP_TOKEN`; an API key in the
 environment is the second source; the public schedule is the last, and is never

@@ -72,7 +72,10 @@ async function lookup(symbol: string, opts: ResolveOptions): Promise<CommissionR
           via: "agent-os",
           detail:
             `Read from your account through Binance Agent OS (session from ${token.source === "env" ? "BINANCE_MCP_TOKEN" : "Claude Code"}).` +
-            (c.discount?.enabled ? ` BNB fee discount of ${(c.discount.rate * 100).toFixed(0)}% is on; not applied here.` : ""),
+            (c.discount?.enabled
+              ? ` A BNB fee discount is on (factor ${c.discount.rate} reported; Binance's published spot discount is 25%, ` +
+                `so the effective rate is likely ${(c.taker * c.discount.rate * 10_000).toFixed(2)} bps). Not applied until a real fill confirms how the factor reads.`
+              : ""),
         };
       }
       reasons.push("Agent OS session found, but it offers no account-commission tool — the Account scope may not be granted.");
