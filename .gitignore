@@ -18,3 +18,4 @@ reference/
 .crucible/
 # sampler process log; the samples themselves are the evidence and are kept
 data/sampler.log
+crucible.config.json
