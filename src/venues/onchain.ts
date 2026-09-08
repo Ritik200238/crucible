@@ -174,8 +174,17 @@ export interface OnchainQuoteOptions {
   side: "BUY" | "SELL";
   /** Size in the base asset. */
   baseQty: number;
-  /** Used to price gas, which is paid in BNB. */
-  bnbPriceUsd: number;
+  /** Price of the pair being traded, used to size the input leg of a buy. */
+  midPriceUsd: number;
+  /**
+   * Price of the chain's native asset, used to price gas.
+   *
+   * Separate from the pair price on purpose. Gas is always paid in BNB, whatever
+   * is being swapped, and a single field serving both was silently correct only
+   * on the BNB pair. On BTC it priced eight microBNB of gas at the Bitcoin
+   * price and invented sixty basis points of cost on a small order.
+   */
+  nativePriceUsd: number;
 }
 
 /**
@@ -199,7 +208,7 @@ export async function quoteOnchain(opts: OnchainQuoteOptions): Promise<OnchainQu
   const buying = opts.side === "BUY";
   const tokenIn = buying ? quote : base;
   const tokenOut = buying ? base : quote;
-  const amountIn = buying ? opts.baseQty * opts.bnbPriceUsd : opts.baseQty;
+  const amountIn = buying ? opts.baseQty * opts.midPriceUsd : opts.baseQty;
 
   const [tiers, gasWei] = await Promise.all([
     Promise.all(FEE_TIERS.map((t) => quoteTier(tokenIn, tokenOut, amountIn, t))),
@@ -217,7 +226,7 @@ export async function quoteOnchain(opts: OnchainQuoteOptions): Promise<OnchainQu
   // pool fee and the price impact together.
   const best = answered.reduce((a, b) => (b.amountOut > a.amountOut ? b : a));
   const gasUnits = best.gasEstimate + GAS_OVERHEAD;
-  const gasCostUsd = (gasUnits * gasWei) / 1e18 * opts.bnbPriceUsd;
+  const gasCostUsd = ((gasUnits * gasWei) / 1e18) * opts.nativePriceUsd;
 
   // A reference quote on the same tier at a size small enough to move the pool
   // almost none. Ten dollars, measured against the curve: on the deepest BNB
@@ -225,7 +234,7 @@ export async function quoteOnchain(opts: OnchainQuoteOptions): Promise<OnchainQu
   // this is comfortably inside the flat part. It is capped at the real size so a
   // trade smaller than the reference reports its impact as zero rather than
   // negative.
-  const referenceIn = Math.min(amountIn, buying ? 10 : 10 / opts.bnbPriceUsd);
+  const referenceIn = Math.min(amountIn, buying ? 10 : 10 / opts.midPriceUsd);
   const reference = await quoteTier(tokenIn, tokenOut, referenceIn, best.feeTier);
 
   return {
@@ -243,17 +252,48 @@ export async function quoteOnchain(opts: OnchainQuoteOptions): Promise<OnchainQu
 }
 
 /**
- * Binance Wallet's service fee for a swap, as a fraction.
+ * Binance Wallet's service fee for a swap.
  *
- * Group 1 covers selected stablecoins and the native tokens of major chains, and
- * a Group 1 to Group 1 swap is free. Everything else is 0.5%, which is large
- * enough to decide the route on its own, so it is charged rather than ignored
- * when either side is outside the group.
+ * The published schedule charges nothing between assets in its first group —
+ * selected stablecoins and the native tokens of major blockchains — and 0.5%
+ * when either side falls outside it. That 0.5% is fifty basis points, which on
+ * these routes is larger than everything else combined, so getting it wrong
+ * decides the venue on its own.
+ *
+ * Two assets are listed only in the group's description rather than by name, so
+ * whether a pegged representation of a major chain's coin qualifies cannot be
+ * settled from the schedule. Those are charged the higher rate and reported as
+ * an assumption. Charging a fee that turns out not to apply costs a routing
+ * opportunity; assuming it away costs money.
  */
-const GROUP_ONE = new Set(["BNB", "WBNB", "ETH", "USDT", "USDC", "FDUSD", "BTCB", "SOL"]);
+const CONFIRMED_FREE = new Set(["BNB", "WBNB", "ETH", "USDT", "USDC", "FDUSD"]);
 
-export function walletServiceFeeRate(fromAsset: string, toAsset: string): number {
-  const from = GROUP_ONE.has(fromAsset.toUpperCase());
-  const to = GROUP_ONE.has(toAsset.toUpperCase());
-  return from && to ? 0 : 0.005;
+export interface WalletFee {
+  rate: number;
+  /** False when the asset's group could not be established from the schedule. */
+  verified: boolean;
+  detail: string;
+}
+
+export function walletServiceFee(fromAsset: string, toAsset: string): WalletFee {
+  const from = fromAsset.toUpperCase();
+  const to = toAsset.toUpperCase();
+
+  if (CONFIRMED_FREE.has(from) && CONFIRMED_FREE.has(to)) {
+    return {
+      rate: 0,
+      verified: true,
+      detail: `Free: ${from} and ${to} are both named in the schedule's first group.`,
+    };
+  }
+
+  const unlisted = [from, to].filter((a) => !CONFIRMED_FREE.has(a));
+  return {
+    rate: 0.005,
+    verified: false,
+    detail:
+      `0.50% assumed, because ${unlisted.join(" and ")} ${unlisted.length > 1 ? "are" : "is"} not ` +
+      `named in the schedule's free group. A pegged asset may qualify under its wording; the higher ` +
+      `rate is charged until that is confirmed, because assuming it away would understate the cost.`,
+  };
 }

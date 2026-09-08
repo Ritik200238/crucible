@@ -13,7 +13,7 @@
  */
 
 import { walkBook, queueAhead } from "../snapshot.ts";
-import { feeTierBps, walletServiceFeeRate } from "../venues/onchain.ts";
+import { feeTierBps, TOKENS, walletServiceFee } from "../venues/onchain.ts";
 import { SETTLEMENT_MS } from "../venues/binance.ts";
 import type {
   CostComponent,
@@ -343,7 +343,15 @@ export function costOnchain(input: CostInput): CostEstimate {
     );
   }
 
-  const serviceRate = walletServiceFeeRate(s.filters.baseAsset, s.filters.quoteAsset);
+  // The fee schedule is written in the chain's token names, not the exchange's
+  // asset names. Bitcoin trades as BTC on the exchange and exists on-chain as
+  // BTCB, and looking the fee up by the wrong one silently charged the outside
+  // rate on a pair that may not owe it.
+  const onchainName = (asset: string) => TOKENS[asset.toUpperCase()]?.symbol ?? asset;
+  const walletFee = walletServiceFee(
+    onchainName(s.filters.baseAsset),
+    onchainName(s.filters.quoteAsset),
+  );
   const gasBps = (s.onchain.gasCostUsd / notionalUsd) * BPS;
 
   // Split the remainder into the two things it is actually made of. Without the
@@ -403,11 +411,9 @@ export function costOnchain(input: CostInput): CostEstimate {
     },
     {
       name: "wallet service fee",
-      bps: serviceRate * BPS,
-      detail:
-        serviceRate === 0
-          ? `Free: ${s.filters.baseAsset} and ${s.filters.quoteAsset} are both major assets.`
-          : `${(serviceRate * 100).toFixed(2)}% charged when either side is outside the major-asset group.`,
+      bps: walletFee.rate * BPS,
+      detail: walletFee.detail,
+      estimated: !walletFee.verified,
     },
   );
 

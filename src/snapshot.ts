@@ -17,6 +17,7 @@ import {
   adverseSelection,
   EXCHANGE_LATENCY_MS,
   fetchAggTrades,
+  fetchMid,
   priceVolatilityBps,
   SETTLEMENT_MS,
   fetchBookTicker,
@@ -110,6 +111,24 @@ export function hashSnapshot(s: Omit<Snapshot, "hash">): string {
   return h.digest("hex").slice(0, 16);
 }
 
+/**
+ * Price of the chain's native asset, cached briefly.
+ *
+ * Needed on every non-BNB snapshot purely to value gas. Gas is a fraction of a
+ * basis point on any routed order, so a price seconds old is far more precision
+ * than the figure it feeds, and fetching it fresh every time would double the
+ * request count for nothing.
+ */
+let nativePrice: { at: number; usd: number } | null = null;
+const NATIVE_PRICE_TTL_MS = 30_000;
+
+export async function nativeAssetPrice(now = Date.now()): Promise<number> {
+  if (nativePrice && now - nativePrice.at < NATIVE_PRICE_TTL_MS) return nativePrice.usd;
+  const usd = await fetchMid("BNBUSDT");
+  nativePrice = { at: now, usd };
+  return usd;
+}
+
 export async function takeSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
   const symbol = opts.symbol.toUpperCase();
   if (!(opts.baseQty > 0)) {
@@ -148,12 +167,18 @@ export async function takeSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
 
   if (!opts.skipOnchain) {
     try {
+      // Gas is paid in BNB whatever is being traded, so its price is fetched
+      // separately for any pair that is not itself BNB.
+      const nativePriceUsd =
+        filters.baseAsset.toUpperCase() === "BNB" ? mid : await nativeAssetPrice();
+
       onchain = await quoteOnchain({
         baseAsset: filters.baseAsset,
         quoteAsset: filters.quoteAsset,
         side: opts.side,
         baseQty: opts.baseQty,
-        bnbPriceUsd: mid,
+        midPriceUsd: mid,
+        nativePriceUsd,
       });
     } catch (err) {
       // A missing on-chain quote is a normal outcome for an unlisted pair or a

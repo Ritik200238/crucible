@@ -501,7 +501,8 @@ test("costOnchain charges no wallet service fee to swap BNB against USDT", () =>
   const fee = component(estimate, "wallet service fee");
 
   assert.equal(fee.bps, 0);
-  assert.match(fee.detail, /both major assets/);
+  assert.match(fee.detail, /first group/);
+  assert.notEqual(fee.estimated, true, "a fee of zero here is read from the schedule, not assumed");
 });
 
 test("costOnchain charges 50 bps when an asset sits outside the major group", () => {
@@ -513,7 +514,33 @@ test("costOnchain charges 50 bps when an asset sits outside the major group", ()
 
   const fee = component(costOnchain({ snapshot: outsider, side: "BUY", baseQty: 10 }), "wallet service fee");
   assert.equal(fee.bps, 50);
-  assert.match(fee.detail, /0\.50% charged/);
+  assert.match(fee.detail, /0\.50% assumed/);
+  assert.equal(fee.estimated, true, "an unestablished group is an assumption and must say so");
+});
+
+test("the wallet fee is looked up by the chain's token name, not the exchange's", () => {
+  // Bitcoin trades as BTC on the exchange and exists on-chain as BTCB. Looking
+  // the fee up by the wrong name is silent: it returns a plausible rate for an
+  // asset that was never checked.
+  const snapshot = pricedFor("BUY", 10);
+  const bitcoin = {
+    ...snapshot,
+    filters: { ...snapshot.filters, symbol: "BTCUSDT", baseAsset: "BTC" },
+  };
+  const fee = component(costOnchain({ snapshot: bitcoin, side: "BUY", baseQty: 10 }), "wallet service fee");
+  assert.match(fee.detail, /BTCB/, "the reason must name the token the schedule would name");
+});
+
+test("an assumed fee is charged rather than assumed away", () => {
+  // The direction of the guess matters. Charging a fee that does not apply
+  // costs a routing opportunity; assuming it away costs money.
+  const snapshot = pricedFor("BUY", 10);
+  const unknown = {
+    ...snapshot,
+    filters: { ...snapshot.filters, symbol: "SOMEUSDT", baseAsset: "SOMETHING" },
+  };
+  const fee = component(costOnchain({ snapshot: unknown, side: "BUY", baseQty: 10 }), "wallet service fee");
+  assert.ok(fee.bps > 0, "the unresolved case takes the higher rate");
 });
 
 test("costOnchain passes through the reason the on-chain leg is missing", () => {
