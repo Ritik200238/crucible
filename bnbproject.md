@@ -240,7 +240,7 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 13 files, ~6,870 lines, **389 tests, all passing** |
+| Tests | 14 files, ~7,110 lines, **403 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
@@ -398,7 +398,7 @@ npm run cli -- status                                  # what can actually execu
 npm run cli -- policy                                  # what is protecting you
 npm run cli -- samples                                 # the evidence so far
 
-npm test              # 389 tests
+npm test              # 403 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```
