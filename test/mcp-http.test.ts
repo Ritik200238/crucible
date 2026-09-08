@@ -16,7 +16,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
 
-import { startDashboard } from "../src/dashboard/server.ts";
+import { assertHostable, DEFAULT_PORT, resolvePort, startDashboard } from "../src/dashboard/server.ts";
 
 let server: Server;
 let base: string;
@@ -149,5 +149,50 @@ describe("read-only for strangers, open for the operator", () => {
     assert.equal(reply.result?.isError, true);
     assert.doesNotMatch(textOf(reply), /read-only/i);
     assert.match(textOf(reply), /No plan called/);
+  });
+});
+
+describe("listening where the platform says to", () => {
+  test("CRUCIBLE_DASHBOARD_PORT wins, then PORT, then the default", () => {
+    // Every container host — Railway, Render, Fly, Heroku — passes PORT.
+    // Ignoring it routes traffic to a port nothing is listening on, and the
+    // deploy fails its health check with nothing useful in the log.
+    assert.equal(resolvePort({ CRUCIBLE_DASHBOARD_PORT: "9001", PORT: "3000" }), 9001);
+    assert.equal(resolvePort({ PORT: "3000" }), 3000);
+    assert.equal(resolvePort({}), DEFAULT_PORT);
+    assert.equal(resolvePort({ PORT: "" }), DEFAULT_PORT, "an empty value is not a port");
+  });
+
+  test("a value that is not a port is refused, and named", () => {
+    assert.throws(() => resolvePort({ PORT: "eighty" }), /PORT is "eighty"/);
+    assert.throws(() => resolvePort({ CRUCIBLE_DASHBOARD_PORT: "70000" }), /CRUCIBLE_DASHBOARD_PORT/);
+    assert.throws(() => resolvePort({ PORT: "-1" }), /not a port/);
+  });
+});
+
+describe("refusing to start unguarded where it would be published", () => {
+  test("PORT without an operator token is refused, and the message says why", () => {
+    // PORT is set by container hosts and by nothing else, so it means this
+    // process is about to be reachable. Unguarded, that publishes execute.
+    assert.throws(() => assertHostable({ PORT: "3000" }), (err: unknown) => {
+      const message = (err as Error).message;
+      assert.match(message, /Refusing to start/);
+      assert.match(message, /CRUCIBLE_MCP_TOKEN/);
+      assert.match(message, /public read-only/);
+      assert.match(message, /health check reaches nothing/);
+      return true;
+    });
+  });
+
+  test("PORT with a token is fine, and so is no PORT at all", () => {
+    assert.doesNotThrow(() => assertHostable({ PORT: "3000", CRUCIBLE_MCP_TOKEN: "a-long-secret" }));
+    // A local run has no PORT and needs no token: it binds loopback, where the
+    // operator is the only caller.
+    assert.doesNotThrow(() => assertHostable({}));
+    assert.doesNotThrow(() => assertHostable({ CRUCIBLE_DASHBOARD_PORT: "8787" }));
+  });
+
+  test("a blank token does not count as one", () => {
+    assert.throws(() => assertHostable({ PORT: "3000", CRUCIBLE_MCP_TOKEN: "   " }), /Refusing to start/);
   });
 });

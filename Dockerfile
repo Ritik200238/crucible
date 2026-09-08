@@ -32,11 +32,14 @@ COPY deploy/ledger/ ./.crucible/
 COPY deploy/crucible.config.json ./crucible.config.json
 
 ENV NODE_ENV=production
-ENV CRUCIBLE_DASHBOARD_PORT=8787
+# The port is deliberately not pinned here. Every container host passes `PORT`,
+# and `CRUCIBLE_DASHBOARD_PORT` takes precedence over it — so setting that in
+# the image would override the platform and route traffic to a port nothing is
+# listening on.
 EXPOSE 8787
 
 # Fails the health check rather than serving a half-started process.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD wget -q -O /dev/null http://127.0.0.1:8787/api/policy || exit 1
+  CMD wget -q -O /dev/null "http://127.0.0.1:${PORT:-8787}/api/policy" || exit 1
 
 CMD ["node", "--experimental-strip-types", "src/dashboard/server.ts"]

@@ -453,14 +453,64 @@ export async function startDashboard(port: number = DEFAULT_PORT, host?: string)
   return server;
 }
 
+/**
+ * Which port to listen on.
+ *
+ * `CRUCIBLE_DASHBOARD_PORT` first, because an operator who names a port means
+ * it. Then `PORT`, which is how every container host — Railway, Render, Fly,
+ * Heroku — tells a process where to listen; ignoring it means the platform
+ * routes to a port nothing is on and the deploy fails its health check with no
+ * useful error. Then the default, for a local run.
+ */
+export function resolvePort(env: NodeJS.ProcessEnv = process.env): number {
+  const named = env.CRUCIBLE_DASHBOARD_PORT ?? env.PORT;
+  if (named === undefined || named.trim() === "") return DEFAULT_PORT;
+  const port = Number(named);
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+    throw new ConfigError(
+      `${env.CRUCIBLE_DASHBOARD_PORT !== undefined ? "CRUCIBLE_DASHBOARD_PORT" : "PORT"} is ` +
+        `"${named}", which is not a port. Set it to a whole number from 0 to 65535, or unset it ` +
+        `to use ${DEFAULT_PORT}.`,
+    );
+  }
+  return port;
+}
+
+/**
+ * Refuse to start unguarded on a platform that will publish us.
+ *
+ * `PORT` is set by container hosts and by nothing else, so its presence is the
+ * signal that this process is about to be reachable from the internet. Without
+ * an operator token the server binds loopback — which inside a container means
+ * the platform's health check reaches nothing, and the deploy fails with a
+ * timeout that says nothing about the cause.
+ *
+ * Failing here instead names the cause, and closes the worse door: a hosted
+ * instance that did bind publicly with `execute` and `reconcile` ungated.
+ */
+export function assertHostable(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.PORT === undefined || env.CRUCIBLE_MCP_TOKEN?.trim()) return;
+  throw new ConfigError(
+    "PORT is set, so this looks like a hosted deploy, but CRUCIBLE_MCP_TOKEN is not. Refusing to " +
+      "start.\n\n" +
+      "That variable does two things: it makes the instance public read-only — every read tool " +
+      "answers anyone, and execute and reconcile need the token as a bearer — and it lets the " +
+      "server bind every interface instead of loopback. Without it a container binds to itself, " +
+      "the platform's health check reaches nothing, and the deploy fails for a reason nobody can " +
+      "see.\n\n" +
+      "Set CRUCIBLE_MCP_TOKEN to a long random secret in the platform's variables, and keep it. " +
+      "Anyone holding it can execute orders through this instance.",
+  );
+}
+
 const entry = process.argv[1];
 if (entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url)) {
-  const port = Number(process.env.CRUCIBLE_DASHBOARD_PORT ?? DEFAULT_PORT);
-  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
-    console.error(
-      `CRUCIBLE_DASHBOARD_PORT is "${process.env.CRUCIBLE_DASHBOARD_PORT}", which is not a port. ` +
-        `Set it to a whole number from 0 to 65535, or unset it to use ${DEFAULT_PORT}.`,
-    );
+  let port: number;
+  try {
+    assertHostable();
+    port = resolvePort();
+  } catch (err) {
+    console.error((err as Error).message);
     process.exit(2);
   }
   await startDashboard(port);
