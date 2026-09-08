@@ -297,6 +297,11 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
   record("execution.completed", {
     planId: plan.id,
     fingerprint: plan.fingerprint,
+    // The symbol and side are what let the cumulative rules rebuild a position
+    // from this record later. Without them a sale cannot be matched to what it
+    // closed, and realised profit is unattributable.
+    symbol: snapshot.symbol,
+    side: plan.intent.side,
     fills: receipt.fills,
     predictedBps: receipt.predicted.totalBps,
     realisedBps: receipt.realisedBps,

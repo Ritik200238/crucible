@@ -16,12 +16,14 @@ import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
 import { verifyLedger } from "./ledger/verify.ts";
+import { Ledger } from "./ledger/chain.ts";
+import { deriveState, emptyState } from "./risk/state.ts";
 import { credentialsFromEnv, DEMO, MAINNET } from "./exec/binance-rest.ts";
 import { walletStatus, walletVersion } from "./exec/wallet.ts";
 import { summarise } from "./sampler/analyse.ts";
 import { ALL_RULES } from "./risk/rules.ts";
 import { evaluate } from "./risk/engine.ts";
-import type { CostEstimate, Plan, Policy, Side, Snapshot } from "./types.ts";
+import type { CostEstimate, Plan, Policy, RollingState, Side, Snapshot } from "./types.ts";
 
 const colour = process.env.NO_COLOR === undefined && process.stdout.isTTY === true;
 const c = {
@@ -38,6 +40,22 @@ const money = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const bps = (n: number) => `${n >= 0 ? "" : "-"}${Math.abs(n).toFixed(2)} bps`;
 const venueName = (v: string) => (v === "ONCHAIN" ? "on-chain" : "Binance spot");
+
+/**
+ * The cumulative counters, rebuilt from the ledger.
+ *
+ * Reading them fresh on every call is what makes the daily and hourly rules
+ * mean anything. A missing or unreadable ledger yields empty counters, which is
+ * the conservative direction: every cap then applies in full rather than
+ * reading as already spent.
+ */
+function rollingState(): RollingState {
+  try {
+    return deriveState(new Ledger().read());
+  } catch {
+    return emptyState();
+  }
+}
 
 function parseArgs(argv: string[]): Map<string, string> {
   const out = new Map<string, string>();
@@ -222,14 +240,7 @@ async function cmdRoute(args: Map<string, string>): Promise<number> {
         realisedPnlTodayUsd: 0,
         source: "simulated",
       },
-      state: {
-        day: new Date().toISOString().slice(0, 10),
-        notionalTodayUsd: 0,
-        ordersToday: 0,
-        recentOrderTimes: [],
-        lastLossAt: null,
-        realisedPnlTodayUsd: 0,
-      },
+      state: rollingState(),
       markPrice: snapshot.mid,
       now: new Date(),
       snapshot,

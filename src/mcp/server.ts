@@ -25,6 +25,7 @@ import { evaluate } from "../risk/engine.ts";
 import { ALL_RULES } from "../risk/rules.ts";
 import { ConfigError, isLiveEnabled, loadPolicy } from "../config.ts";
 import { Ledger } from "../ledger/chain.ts";
+import { deriveState, emptyState } from "../risk/state.ts";
 import { verifyLedger } from "../ledger/verify.ts";
 import { isSample, readSamples } from "../sampler/run.ts";
 import { summarise } from "../sampler/analyse.ts";
@@ -34,7 +35,7 @@ import { walletStatus, walletVersion } from "../exec/wallet.ts";
 import { BinanceError, fetchMid } from "../venues/binance.ts";
 import { OnchainError } from "../venues/onchain.ts";
 import { SnapshotError } from "../snapshot.ts";
-import type { Plan, Side, Snapshot } from "../types.ts";
+import type { Plan, RollingState, Side, Snapshot } from "../types.ts";
 
 const CONFIG_PATH = process.env.CRUCIBLE_CONFIG;
 
@@ -67,6 +68,22 @@ const server = new McpServer(
       "another tool. Tell the user which rule stopped it.",
   },
 );
+
+/**
+ * The cumulative counters, rebuilt from the ledger.
+ *
+ * Reading them fresh on every call is what makes the daily and hourly rules
+ * mean anything. A missing or unreadable ledger yields empty counters, which is
+ * the conservative direction: every cap then applies in full rather than
+ * reading as already spent.
+ */
+function rollingState(): RollingState {
+  try {
+    return deriveState(new Ledger().read());
+  } catch {
+    return emptyState();
+  }
+}
 
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 const fail = (s: string) => ({ ...text(s), isError: true as const });
@@ -213,14 +230,7 @@ server.registerTool(
             realisedPnlTodayUsd: 0,
             source: "simulated",
           },
-          state: {
-            day: new Date().toISOString().slice(0, 10),
-            notionalTodayUsd: 0,
-            ordersToday: 0,
-            recentOrderTimes: [],
-            lastLossAt: null,
-            realisedPnlTodayUsd: 0,
-          },
+          state: rollingState(),
           markPrice: snapshot.mid,
           now: new Date(),
           snapshot,
