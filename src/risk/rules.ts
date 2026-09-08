@@ -8,17 +8,22 @@
  */
 
 import type {
-  EvaluationContext,
   NoTradeWindow,
+  OrderBook,
   Policy,
   ProposedOrder,
   Rule,
   RuleResult,
+  Side,
+  WalletQuote,
 } from "../types.ts";
 
 const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 const pct = (n: number) => `${n.toFixed(1)}%`;
+const bps = (n: number) => `${n.toFixed(1)} bps`;
+const ms = (n: number) => `${Math.round(n).toLocaleString("en-US")} ms`;
+const price = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
 /**
  * Does this order shrink exposure rather than grow it?
@@ -389,7 +394,7 @@ export const confirmAboveNotional: Rule = {
  *
  * quoteOrderQty is already denominated in the quote asset, so it is taken at
  * face value; quantity is converted at the mark price. This assumes a USD-pegged
- * quote asset, which holds for the USDT and USDC pairs Guardrail targets. Pairs
+ * quote asset, which holds for the USDT and USDC pairs this product targets. Pairs
  * quoted in BTC or BNB would need a second conversion hop, and are not yet
  * supported - `assertSupportedQuote` in engine.ts refuses them rather than
  * silently mispricing the risk.
@@ -402,6 +407,254 @@ export function orderNotionalUsd(order: ProposedOrder, markPrice: number): numbe
   }
   return 0;
 }
+
+// ---------------------------------------------------------------------------
+// Execution rules
+//
+// The rules above cap how much can be lost. The rules below cap how far a fill
+// is allowed to drift from the one that was planned. They read the snapshot the
+// routing decision was priced on, and every one of them returns null when the
+// snapshot it needs is absent - an order evaluated without market state is not
+// silently waved through, it is simply not the thing these rules judge.
+// ---------------------------------------------------------------------------
+
+/**
+ * A snapshot with no usable mid cannot measure anything quoted in bps of mid.
+ * Refusing beats reporting a drift of Infinity as if it were a number.
+ */
+function unusableMid(rule: string, mid: number): RuleResult {
+  return block(
+    rule,
+    `The snapshot's mid price is ${price(mid)}, so this check cannot be computed. Take a fresh snapshot before sending.`,
+    { mid },
+  );
+}
+
+/** The cost of size itself: what the book charges beyond the touch. */
+export const maxImpact: Rule = {
+  name: "max_impact_bps",
+  purpose: "Refuses orders whose walk through the book costs more than you agreed to pay.",
+  isConfigured: (p: Policy) => p.maxImpactBps !== undefined,
+  evaluate(order, ctx) {
+    const cap = ctx.policy.maxImpactBps;
+    if (cap === undefined) return null;
+    if (reducesRisk(order)) {
+      return skip(this.name, "Skipped: this order reduces exposure.");
+    }
+    if (ctx.impactBps === undefined) return null;
+
+    if (ctx.impactBps <= cap) {
+      return pass(
+        this.name,
+        `Walking the book for this size costs ${bps(ctx.impactBps)}, inside your ${bps(cap)} impact cap.`,
+        { impactBps: ctx.impactBps, capBps: cap },
+      );
+    }
+    return block(
+      this.name,
+      `Walking the book for this size costs ${bps(ctx.impactBps)}, over your ${bps(cap)} impact cap. ` +
+        `Trade smaller or split it.`,
+      { impactBps: ctx.impactBps, capBps: cap, overBps: ctx.impactBps - cap },
+    );
+  },
+};
+
+/** How far the price being sent has drifted from the price that was priced. */
+export const maxSlippage: Rule = {
+  name: "max_slippage_bps",
+  purpose: "Refuses an order whose price has drifted from the mid the plan was built on.",
+  isConfigured: (p: Policy) => p.maxSlippageBps !== undefined,
+  evaluate(order, ctx) {
+    const cap = ctx.policy.maxSlippageBps;
+    if (cap === undefined) return null;
+    const snapshot = ctx.snapshot;
+    if (!snapshot || order.price === undefined) return null;
+    if (!(snapshot.mid > 0)) return unusableMid(this.name, snapshot.mid);
+
+    const driftBps = (Math.abs(order.price - snapshot.mid) / snapshot.mid) * 10_000;
+    const detail = {
+      orderPrice: order.price,
+      mid: snapshot.mid,
+      driftBps,
+      capBps: cap,
+    };
+
+    if (driftBps <= cap) {
+      return pass(
+        this.name,
+        `Order price ${price(order.price)} is ${bps(driftBps)} from the ${price(snapshot.mid)} mid, inside your ${bps(cap)} slippage cap.`,
+        detail,
+      );
+    }
+    return block(
+      this.name,
+      `Order price ${price(order.price)} is ${bps(driftBps)} from the ${price(snapshot.mid)} mid, over your ${bps(cap)} slippage cap. ` +
+        `Re-price against a current snapshot before sending.`,
+      detail,
+    );
+  },
+};
+
+/**
+ * Resting notional within `windowBps` of mid on the side this order would hit.
+ *
+ * Both sides of the book arrive sorted away from mid, so the first level outside
+ * the window ends the walk.
+ */
+export function restingNotionalUsd(
+  book: OrderBook,
+  side: Side,
+  mid: number,
+  windowBps: number,
+): number {
+  const levels = side === "BUY" ? book.asks : book.bids;
+  const edge =
+    side === "BUY" ? mid * (1 + windowBps / 10_000) : mid * (1 - windowBps / 10_000);
+
+  let total = 0;
+  for (const level of levels) {
+    if (side === "BUY" ? level.price > edge : level.price < edge) break;
+    total += level.price * level.qty;
+  }
+  return total;
+}
+
+/** A book too thin to absorb the order will fill it at a price nobody quoted. */
+export const minDepthNotional: Rule = {
+  name: "min_depth_notional",
+  purpose: "Refuses to trade into a book too thin to absorb the order near mid.",
+  isConfigured: (p: Policy) =>
+    p.minDepthNotionalUsd !== undefined && p.depthWindowBps !== undefined,
+  evaluate(order, ctx) {
+    const floor = ctx.policy.minDepthNotionalUsd;
+    const window = ctx.policy.depthWindowBps;
+    if (floor === undefined || window === undefined) return null;
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return null;
+    if (!(snapshot.mid > 0)) return unusableMid(this.name, snapshot.mid);
+
+    const resting = restingNotionalUsd(snapshot.book, order.side, snapshot.mid, window);
+    const sideName = order.side === "BUY" ? "ask" : "bid";
+    const detail = {
+      side: sideName,
+      restingUsd: resting,
+      windowBps: window,
+      floorUsd: floor,
+    };
+
+    if (resting >= floor) {
+      return pass(
+        this.name,
+        `${usd(resting)} rests within ${bps(window)} of mid on the ${sideName} side, over your ${usd(floor)} depth floor.`,
+        detail,
+      );
+    }
+    return block(
+      this.name,
+      `Only ${usd(resting)} rests within ${bps(window)} of mid on the ${sideName} side, under your ${usd(floor)} depth floor. ` +
+        `This order would walk past the quoted price.`,
+      detail,
+    );
+  },
+};
+
+/** A decision priced on market state that has since moved must not execute. */
+export const snapshotMaxAge: Rule = {
+  name: "snapshot_max_age",
+  purpose: "Refuses to act on market state old enough to have moved underneath the plan.",
+  isConfigured: (p: Policy) => p.snapshotMaxAgeMs !== undefined,
+  evaluate(_order, ctx) {
+    const maxAge = ctx.policy.snapshotMaxAgeMs;
+    if (maxAge === undefined || !ctx.snapshot) return null;
+
+    const ageMs = ctx.now.getTime() - ctx.snapshot.takenAt;
+    const detail = { ageMs, maxAgeMs: maxAge, takenAt: ctx.snapshot.takenAt };
+
+    if (ageMs <= maxAge) {
+      return pass(
+        this.name,
+        `Snapshot is ${ms(ageMs)} old, inside your ${ms(maxAge)} freshness limit.`,
+        detail,
+      );
+    }
+    return block(
+      this.name,
+      `Snapshot is ${ms(ageMs)} old, past your ${ms(maxAge)} freshness limit. ` +
+        `The prices this decision was made on are no longer the prices you would get.`,
+      detail,
+    );
+  },
+};
+
+/** Routing can pick a venue; this is where you say which ones it may pick. */
+export const venueAllowlist: Rule = {
+  name: "venue_allowlist",
+  purpose: "Keeps fills on the venues you have approved for this account.",
+  isConfigured: (p: Policy) => (p.venueAllowlist?.length ?? 0) > 0,
+  evaluate(order, ctx) {
+    const allowed = ctx.policy.venueAllowlist;
+    if (!allowed || allowed.length === 0) return null;
+    if (order.venue === undefined) return null;
+
+    if (allowed.includes(order.venue)) {
+      return pass(this.name, `${order.venue} is an allowed venue.`, {
+        venue: order.venue,
+        allowed,
+      });
+    }
+    return block(
+      this.name,
+      `This order routes to ${order.venue}, which is not in your venue allowlist (${allowed.join(", ")}).`,
+      { venue: order.venue, allowed },
+    );
+  },
+};
+
+/**
+ * The wallet reports the swap it would actually send, so the side of the order
+ * decides which way up its ratio has to go to become quote per base - the unit
+ * the pool quote is already in.
+ */
+function walletPriceQuotePerBase(quote: WalletQuote, side: Side): number | null {
+  if (!(quote.amountIn > 0) || !(quote.amountOut > 0)) return null;
+  return side === "BUY" ? quote.amountIn / quote.amountOut : quote.amountOut / quote.amountIn;
+}
+
+/** Two independent sources disagreeing means one is wrong, and neither says which. */
+export const quoteDisagreement: Rule = {
+  name: "quote_disagreement",
+  purpose: "Refuses to execute when the two independent on-chain price sources contradict each other.",
+  isConfigured: (p: Policy) => p.maxQuoteDisagreementBps !== undefined,
+  evaluate(order, ctx) {
+    const cap = ctx.policy.maxQuoteDisagreementBps;
+    if (cap === undefined) return null;
+    const onchain = ctx.snapshot?.onchain;
+    if (!onchain?.best || !onchain.walletQuote) return null;
+
+    const poolPrice = onchain.best.price;
+    const walletPrice = walletPriceQuotePerBase(onchain.walletQuote, order.side);
+    if (walletPrice === null || !(poolPrice > 0)) return null;
+
+    // Neither quote is the reference - if one were known good there would be
+    // nothing to check - so the gap is measured against their midpoint.
+    const gapBps = (Math.abs(poolPrice - walletPrice) / ((poolPrice + walletPrice) / 2)) * 10_000;
+    const detail = { poolPrice, walletPrice, gapBps, capBps: cap };
+
+    if (gapBps <= cap) {
+      return pass(
+        this.name,
+        `Pool and wallet quotes agree to ${bps(gapBps)}, inside your ${bps(cap)} disagreement limit.`,
+        detail,
+      );
+    }
+    return block(
+      this.name,
+      `The pool quote (${price(poolPrice)}) and the wallet quote (${price(walletPrice)}) differ by ${bps(gapBps)}, ` +
+        `over your ${bps(cap)} disagreement limit. One of them is wrong and neither says which.`,
+      detail,
+    );
+  },
+};
 
 /** Evaluation order is the order these appear in a report, so it is deliberate. */
 export const ALL_RULES: Rule[] = [
@@ -416,4 +669,10 @@ export const ALL_RULES: Rule[] = [
   maxOrdersPerHour,
   noTradeWindows,
   confirmAboveNotional,
+  maxImpact,
+  maxSlippage,
+  minDepthNotional,
+  snapshotMaxAge,
+  venueAllowlist,
+  quoteDisagreement,
 ];

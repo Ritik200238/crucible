@@ -22,14 +22,14 @@ export class InvalidOrderError extends Error {
   }
 }
 
-/** Quote assets Guardrail can price at 1:1 against USD. */
+/** Quote assets that can be priced at 1:1 against USD. */
 const USD_QUOTES = ["USDT", "USDC", "FDUSD", "TUSD", "BUSD", "USD"];
 
 /**
- * Refuse pairs Guardrail cannot price correctly.
+ * Refuse pairs that cannot be priced correctly.
  *
  * A BTC-quoted pair would need a second conversion hop to reach USD. Rather than
- * guess and under-report the risk on every notional rule, Guardrail declines to
+ * guess and under-report the risk on every notional rule, the engine declines to
  * evaluate it at all. Refusing to answer beats answering wrongly when the answer
  * decides whether real money moves.
  */
@@ -37,7 +37,7 @@ export function assertSupportedQuote(symbol: string): void {
   const s = symbol.toUpperCase();
   if (!USD_QUOTES.some((q) => s.endsWith(q))) {
     throw new InvalidOrderError(
-      `${symbol} is not quoted in a USD-pegged asset. Guardrail prices risk in USD and ` +
+      `${symbol} is not quoted in a USD-pegged asset. Risk is priced in USD here, and ` +
         `will not evaluate a pair it cannot price directly (supported quotes: ${USD_QUOTES.join(", ")}).`,
     );
   }
