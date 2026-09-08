@@ -16,11 +16,12 @@ What that has produced so far — every figure checkable in this repository:
 
 - **20 real orders** through the full pipeline on Binance's matching engine,
   each receipted, with a mean prediction error of **0.08 bps**
-- **Your real commission**, read through Binance's own MCP server, not a
-  public fee schedule
+- **Your real commission and your real equity**, both read through Binance's
+  own MCP server — fees at your account's rate, and the risk caps sized to your
+  actual balance, not a public schedule and a guessed number
 - **17 bugs found by attacking it**, three of which could have moved money to
-  the wrong place — sixteen of them re-run as attacks in CI on every push
-- **492 tests**, none of which need a network
+  the wrong place — all seventeen re-run as attacks in CI on every push
+- **500 tests**, none of which need a network
 - A signed, hash-chained ledger you can **verify in your own browser**
 
 **Try it now: [crucible-router.vercel.app](https://crucible-router.vercel.app).**
@@ -256,7 +257,7 @@ five orders were refused. Every refusal returns a correct summary built only
 from records. An agent can still not call it; what it cannot do is call it and
 lie.
 
-## Read your real fees through Agent OS
+## Built on Agent OS: your real fees, your real equity, the whole tool surface
 
 Commission is ten of the eleven basis points on a typical exchange-side quote,
 and it decides the venue on its own. Without a credential Crucible prices at the
@@ -281,6 +282,14 @@ environment is the second source; the public schedule is the last, and is never
 presented as anything else.
 
 The session is used only to read here. Orders still go out on the signed execution path.
+
+The same session sizes the risk caps to your **real spot balance** rather than a
+placeholder, and `scripts/enumerate-agentos.ts` walks the server's full surface
+— the fifty listed tools plus `tool_search` across every category — into
+[`docs/agentos-catalogue.json`](docs/agentos-catalogue.json): **221 tools**,
+each classified read or write, fail-closed so an unrecognised tool counts as a
+write. A first-party capture from this repository's own session, not a
+transcription.
 
 ## How it is built
 
