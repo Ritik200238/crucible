@@ -85,11 +85,12 @@ describe("the transport", () => {
     assert.ok(body.result?.serverInfo?.name, "serverInfo must be present");
   });
 
-  test("the same nine tools as the stdio server", async () => {
+  test("the same ten tools as the stdio server", async () => {
     const { reply } = await rpc("tools/list");
     const names = (reply.result?.tools ?? []).map((t) => t.name).sort();
     assert.deepEqual(names, [
       "calibration",
+      "check_claim",
       "evidence",
       "execute",
       "policy",

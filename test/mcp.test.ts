@@ -110,11 +110,12 @@ after(() => client.stop());
 const textOf = (r: Reply) => r.result?.content?.[0]?.text ?? "";
 
 describe("what the server offers an agent", () => {
-  test("exactly the nine documented tools, no more", () => {
+  test("exactly the ten documented tools, no more", () => {
     return client.send("tools/list").then((r) => {
       const names = (r.result?.tools ?? []).map((t) => t.name).sort();
       assert.deepEqual(names, [
         "calibration",
+        "check_claim",
         "evidence",
         "execute",
         "policy",

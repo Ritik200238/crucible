@@ -197,6 +197,7 @@ beyond loopback, so a hosted instance cannot be open by accident.
 | `verify_ledger` | Recompute the hash chain and check the signature |
 | `calibration` | How wrong the cost model has been against real fills |
 | `reconcile` | Resolve an order that was sent but never read back |
+| `check_claim` | Check a summary against the ledger before telling the user |
 | `status` | Whether each execution path can actually be reached |
 
 `execute` takes **only a plan id**. The plan is the authorisation, so an agent
@@ -210,6 +211,16 @@ failure, because the right response is the opposite: a failure can be retried,
 an unconfirmed order must not be. Its notional stays held against every cap
 until `reconcile` asks the venue and gets an answer. Not knowing is never
 treated as knowing it did not happen.
+
+And what the agent *says* is checked too. Every gate above governs what reaches
+a venue; `check_claim` governs what reaches you. A summary is held to the
+ledger: every figure must be one a record carries at the precision written, a
+trade may only be called done when a fill was confirmed, and — the one a
+word-by-word check cannot see — a refusal that happened may not be left out.
+"I reviewed the market and took no action" is true in every word and false when
+five orders were refused. Every refusal returns a correct summary built only
+from records. An agent can still not call it; what it cannot do is call it and
+lie.
 
 ## Read your real fees through Agent OS
 

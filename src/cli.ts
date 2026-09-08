@@ -22,10 +22,11 @@ import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
 import { verifyLedger } from "./ledger/verify.ts";
+import { checkClaim } from "./ledger/claims.ts";
 import { execute, ExecutionError, reconcile } from "./exec/execute.ts";
 import { calibration } from "./exec/calibration.ts";
 import { credentialsFromEnv, type Credentials } from "./exec/binance-rest.ts";
-import { Ledger } from "./ledger/chain.ts";
+import { Ledger, type LedgerRecord } from "./ledger/chain.ts";
 import { deriveState, emptyState } from "./risk/state.ts";
 import { DEMO, MAINNET } from "./exec/binance-rest.ts";
 import { walletStatus, walletVersion } from "./exec/wallet.ts";
@@ -651,6 +652,40 @@ function cmdCalibration(args: Map<string, string>): number {
   return 0;
 }
 
+/**
+ * Check a summary against the ledger.
+ *
+ * The agent-facing tool and this command share one checker; this exists so an
+ * operator can paste what an agent said and see whether the record supports it.
+ */
+function cmdClaim(args: Map<string, string>): number {
+  const summary = args.get("text");
+  if (!summary || summary === "true") {
+    console.error('  Give the summary to check: crucible claim --text "Bought 0.66 BNB and saved 8 bps"');
+    return 2;
+  }
+  let records: LedgerRecord[];
+  try {
+    records = new Ledger().read();
+  } catch (err) {
+    console.error(`  The ledger could not be read: ${(err as Error).message}`);
+    return 1;
+  }
+  const r = checkClaim(summary, records);
+  console.log();
+  if (r.ok) {
+    console.log(`  ${c.green("OK")}  every figure is carried by a record (${r.grounded.length} grounded); nothing that happened is left out.`);
+  } else {
+    console.log(`  ${c.red("REFUSED")}  ${r.problems.length} problem(s)`);
+    for (const p of r.problems) console.log(`    - ${c.dim(p.kind)}  ${p.detail}`);
+    console.log();
+    console.log(`  ${c.bold("Say this instead")} ${c.dim("(built only from records)")}`);
+    console.log(`  ${r.replacement}`);
+  }
+  console.log();
+  return r.ok ? 0 : 1;
+}
+
 function cmdVerify(): number {
   const r = verifyLedger();
   console.log();
@@ -717,6 +752,7 @@ async function main(): Promise<number> {
       case "verify": return cmdVerify();
       case "calibration": return cmdCalibration(args);
       case "reconcile": return await cmdReconcile(args);
+      case "claim": return cmdClaim(args);
       case "sample": return await cmdSample();
       case "samples": return cmdSamples(args);
       case undefined:

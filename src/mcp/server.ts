@@ -29,6 +29,7 @@ import { ConfigError, isLiveEnabled, loadPolicy } from "../config.ts";
 import { Ledger } from "../ledger/chain.ts";
 import { deriveState, emptyState } from "../risk/state.ts";
 import { verifyLedger } from "../ledger/verify.ts";
+import { checkClaim } from "../ledger/claims.ts";
 import { calibration } from "../exec/calibration.ts";
 import { isSample, readSamples } from "../sampler/run.ts";
 import { summarise } from "../sampler/analyse.ts";
@@ -464,6 +465,42 @@ export function buildServer(opts: BuildOptions): McpServer {
           r.crossoverNote,
         ].join("\n"),
       );
+    },
+  );
+
+  server.registerTool(
+    "check_claim",
+    {
+      title: "Check what you are about to tell the user against the ledger",
+      description:
+        "Before summarising what happened, pass the summary here. It is checked against the signed " +
+        "ledger: every figure must be one a record carries at the precision written, a trade may only " +
+        "be described as done when a fill was confirmed, an unresolved order may not be called done, a " +
+        "refusal or unresolved order that happened may not be left out, and forecasts or advice are " +
+        "refused. A refusal comes back with a correct summary built only from records — use that instead.",
+      inputSchema: {
+        text: z.string().min(1).describe("The summary you intend to give the user."),
+        sinceMinutes: z.number().positive().optional().describe("Only judge against records from the last N minutes."),
+      },
+    },
+    async (args) => {
+      const { text: summary, sinceMinutes } = args as { text: string; sinceMinutes?: number };
+      let records;
+      try {
+        records = new Ledger().read();
+      } catch (err) {
+        return fail(`The ledger could not be read, so the summary cannot be checked: ${(err as Error).message}`);
+      }
+      const r = checkClaim(summary, records, sinceMinutes ? { since: Date.now() - sinceMinutes * 60_000 } : {});
+      const lines: string[] = [];
+      if (r.ok) {
+        lines.push(`OK. Every figure is carried by a record (${r.grounded.length} grounded), and nothing that happened is left out.`);
+      } else {
+        lines.push(`REFUSED. ${r.problems.length} problem(s):`);
+        for (const p of r.problems) lines.push(`  - [${p.kind}] ${p.detail}`);
+        lines.push("", "Say this instead — it is built only from records:", r.replacement);
+      }
+      return text(lines.join("\n"));
     },
   );
 

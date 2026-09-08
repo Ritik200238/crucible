@@ -272,14 +272,15 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 17 files, ~8,097 lines, **453 tests, all passing** |
+| Tests | 18 files, ~8,316 lines, **474 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
 ### Surfaces
 
-**MCP server** — nine tools an AI agent drives: `quote`, `route`, `execute`,
-`policy`, `evidence`, `verify_ledger`, `calibration`, `reconcile`, `status`.
+**MCP server** — ten tools an AI agent drives: `quote`, `route`, `execute`,
+`policy`, `evidence`, `verify_ledger`, `calibration`, `reconcile`, `check_claim`,
+`status`.
 Over stdio for a local agent, or over streamable HTTP at `POST /mcp` on the
 dashboard for a hosted one, with a public read-only mode gated by an operator
 token.
@@ -314,6 +315,23 @@ from the data behind them.
 repository.
 
 ---
+
+### Skills Hub skill
+
+`skills/crucible/` is a Binance Skills Hub skill: `SKILL.md` with the hub's
+frontmatter and trigger phrases, `references/tools.md` describing all ten
+tools, and `scripts/crucible.sh` for runners without MCP. `.mcp.json` at the
+repository root registers Crucible beside `binance-mcp-server` so both sit in
+one Claude Code session.
+
+### What the agent may say
+
+`check_claim` holds a summary to the ledger before it reaches the user: every
+figure must be one a record carries at the precision written, a trade may only
+be called done with a confirmed fill behind it, an unresolved order may not be
+called done, and a refusal that happened may not be left out. Forecasts and
+advice are refused outright. Every refusal returns a correct summary built by
+concatenating records, never by generation.
 
 ## 6. Fifteen bugs found by attacking it
 
@@ -438,7 +456,7 @@ npm run cli -- status                                  # what can actually execu
 npm run cli -- policy                                  # what is protecting you
 npm run cli -- samples                                 # the evidence so far
 
-npm test              # 453 tests
+npm test              # 474 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```
