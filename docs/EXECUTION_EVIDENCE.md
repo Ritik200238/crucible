@@ -26,9 +26,9 @@ snapshot, so the two venues land on one comparable axis. A basis point is 0.01%.
 
 ## The sample
 
-- **18 priced comparisons** over **0.2 hours**
-- From `2026-09-08T11:54:14.045Z` to `2026-09-08T12:04:47.657Z`
-- 18 rows on disk
+- **26 priced comparisons** over **0.3 hours**
+- From `2026-09-08T11:54:14.045Z` to `2026-09-08T12:14:47.686Z`
+- 26 rows on disk
 
 > This span is under a day. It is enough to show the shape of the cost curve and
 > the size at which the cheaper venue changes, and it is **not** enough to say
@@ -36,21 +36,21 @@ snapshot, so the two venues land on one comparable axis. A basis point is 0.01%.
 
 ## What it shows
 
-**On-chain was cheaper in 67% of 18 samples**, with a median
-edge of **5.21 bps**.
+**On-chain was cheaper in 65% of 26 samples**, with a median
+edge of **5.29 bps**.
 
 BNBUSDT: on-chain is cheaper to about $10,000, and Binance takes over by $100,000. ETHUSDT: on-chain is cheaper to about $1,000, and Binance takes over by $10,000.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 2 | 100% | 2.03 bps | 10.04 bps | 8.01 bps |
-| BNBUSDT | $1,000 | 3 | 100% | 2.01 bps | 10.03 bps | 8.02 bps |
-| BNBUSDT | $10,000 | 2 | 100% | 2.80 bps | 9.98 bps | 7.17 bps |
-| BNBUSDT | $100,000 | 2 | 0% | 12.79 bps | 10.24 bps | -2.55 bps |
-| ETHUSDT | $100 | 2 | 100% | 4.96 bps | 10.01 bps | 5.05 bps |
-| ETHUSDT | $1,000 | 3 | 100% | 4.75 bps | 10.01 bps | 5.27 bps |
-| ETHUSDT | $10,000 | 2 | 0% | 16.74 bps | 10.01 bps | -6.73 bps |
-| ETHUSDT | $100,000 | 2 | 0% | 77.22 bps | 10.28 bps | -66.94 bps |
+| BNBUSDT | $100 | 3 | 100% | 2.07 bps | 10.04 bps | 7.98 bps |
+| BNBUSDT | $1,000 | 4 | 100% | 1.92 bps | 10.03 bps | 8.11 bps |
+| BNBUSDT | $10,000 | 3 | 100% | 2.89 bps | 10.00 bps | 7.18 bps |
+| BNBUSDT | $100,000 | 3 | 0% | 12.28 bps | 10.38 bps | -1.69 bps |
+| ETHUSDT | $100 | 3 | 100% | 4.85 bps | 10.01 bps | 5.16 bps |
+| ETHUSDT | $1,000 | 4 | 100% | 4.73 bps | 10.01 bps | 5.29 bps |
+| ETHUSDT | $10,000 | 3 | 0% | 16.31 bps | 10.01 bps | -6.30 bps |
+| ETHUSDT | $100,000 | 3 | 0% | 77.12 bps | 10.26 bps | -66.87 bps |
 
 The edge is the better of the two Binance routes minus the on-chain route, so a
 positive number means on-chain won.
@@ -59,14 +59,14 @@ positive number means on-chain won.
 
 | Pair | Order size | pool fee | venue divergence | price impact | gas | wallet service fee |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 1.000 | 0.443 | 0.009 | 0.573 | 0.000 |
-| BNBUSDT | $1,000 | 1.000 | 0.845 | 0.106 | 0.057 | 0.000 |
-| BNBUSDT | $10,000 | 1.000 | 0.811 | 0.982 | 0.009 | 0.000 |
-| BNBUSDT | $100,000 | 1.000 | 2.433 | 9.349 | 0.003 | 0.000 |
-| ETHUSDT | $100 | 1.000 | 0.911 | 0.855 | 2.194 | 0.000 |
-| ETHUSDT | $1,000 | 1.000 | 1.041 | 2.481 | 0.223 | 0.000 |
-| ETHUSDT | $10,000 | 5.000 | 4.931 | 6.779 | 0.027 | 0.000 |
-| ETHUSDT | $100,000 | 5.000 | 4.877 | 67.332 | 0.006 | 0.000 |
+| BNBUSDT | $100 | 1.000 | 0.487 | 0.010 | 0.573 | 0.000 |
+| BNBUSDT | $1,000 | 1.000 | 0.760 | 0.106 | 0.057 | 0.000 |
+| BNBUSDT | $10,000 | 1.000 | 0.771 | 1.061 | 0.009 | 0.000 |
+| BNBUSDT | $100,000 | 1.000 | 0.891 | 9.531 | 0.003 | 0.000 |
+| ETHUSDT | $100 | 1.000 | 0.123 | 0.226 | 2.141 | 0.000 |
+| ETHUSDT | $1,000 | 1.000 | 1.040 | 2.481 | 0.224 | 0.000 |
+| ETHUSDT | $10,000 | 5.000 | 4.502 | 6.777 | 0.027 | 0.000 |
+| ETHUSDT | $100,000 | 5.000 | 4.502 | 67.442 | 0.006 | 0.000 |
 
 All values in basis points. Impact is the only component that grows with size,
 which is why the cheaper venue changes as the order gets bigger: the Binance

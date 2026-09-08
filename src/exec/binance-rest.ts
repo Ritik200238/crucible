@@ -15,7 +15,7 @@
  */
 
 import { createHmac, createPrivateKey, sign as cryptoSign } from "node:crypto";
-import type { ConfirmedFill, FillStatus, SymbolFilters } from "../types.ts";
+import type { ConfirmedFill, FeeCharge, FillStatus, SymbolFilters } from "../types.ts";
 
 /** Live exchange. Real money. */
 export const MAINNET = "https://api.binance.com";
@@ -133,7 +133,10 @@ export class BinanceRest {
     }
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
     this.creds = opts.credentials;
-    this.recvWindow = Math.min(opts.recvWindow ?? 5000, 60_000);
+    // Clamped at both ends. Binance caps it at 60000, and a zero or negative
+    // window is rejected outright — silently forwarding one would turn a
+    // configuration slip into an unexplained rejection at send time.
+    this.recvWindow = Math.min(Math.max(opts.recvWindow ?? 5000, 1), 60_000);
     this.timeoutMs = opts.timeoutMs ?? 15_000;
     this.doFetch = opts.fetchImpl ?? fetch;
   }
@@ -328,18 +331,32 @@ export function toConfirmedFill(
 ): ConfirmedFill {
   const executed = Number(order.executedQty);
   const quote = Number(order.cummulativeQuoteQty);
+  const avgPrice = executed > 0 ? quote / executed : 0;
 
-  const feeByAsset = new Map<string, number>();
+  const byAsset = new Map<string, number>();
   for (const t of trades) {
-    feeByAsset.set(t.commissionAsset, (feeByAsset.get(t.commissionAsset) ?? 0) + Number(t.commission));
+    byAsset.set(t.commissionAsset, (byAsset.get(t.commissionAsset) ?? 0) + Number(t.commission));
   }
-  // Fees can be charged in more than one asset when a discount partly applies.
-  // The largest is reported and the rest noted, rather than summing units that
-  // are not the same thing.
-  const [feeAsset, feeAmount] = [...feeByAsset.entries()].sort((a, b) => b[1] - a[1])[0] ?? [
-    filters.quoteAsset,
-    0,
-  ];
+
+  // An order's commission can be split across assets when a discount runs out
+  // part way through. Every one is carried: reducing them to a single "largest"
+  // both loses money from the receipt and picks wrongly, because raw amounts in
+  // different assets are not comparable.
+  //
+  // A fee in the quote asset is already priced. One in the base asset converts
+  // at the fill's own average price. Anything else — a discount asset that is
+  // neither leg — cannot be priced from this order alone, so it is reported
+  // unpriced rather than guessed at or silently dropped.
+  const fees: FeeCharge[] = [...byAsset.entries()].map(([asset, amount]) => {
+    let valueInQuote: number | null = null;
+    if (asset === filters.quoteAsset) valueInQuote = amount;
+    else if (asset === filters.baseAsset && avgPrice > 0) valueInQuote = amount * avgPrice;
+    return { asset, amount, valueInQuote };
+  });
+
+  const priced = fees.filter((f) => f.valueInQuote !== null);
+  const totalFeeInQuote =
+    priced.length > 0 ? priced.reduce((a, f) => a + f.valueInQuote!, 0) : fees.length === 0 ? 0 : null;
 
   const makerFlags = new Set(trades.map((t) => t.isMaker));
 
@@ -351,9 +368,9 @@ export function toConfirmedFill(
     status,
     filledBaseQty: executed,
     filledQuoteQty: quote,
-    avgPrice: executed > 0 ? quote / executed : 0,
-    feeAsset,
-    feeAmount,
+    avgPrice,
+    fees,
+    totalFeeInQuote,
     isMaker: makerFlags.size === 1 ? [...makerFlags][0]! : null,
     reference: String(order.orderId),
     confirmedBy: `GET /api/v3/order plus ${trades.length} trade record(s)`,

@@ -16,7 +16,6 @@
  */
 
 import { assertExecutable, RouteError } from "../decide/router.ts";
-import { isLiveEnabled } from "../config.ts";
 import { Ledger } from "../ledger/chain.ts";
 import { NATIVE_BNB, TOKENS } from "../venues/onchain.ts";
 import { roundToStep } from "../venues/binance.ts";
@@ -27,14 +26,7 @@ import {
   type Credentials,
 } from "./binance-rest.ts";
 import { executeSwap, walletLimits, walletStatus, WalletError } from "./wallet.ts";
-import type {
-  ConfirmedFill,
-  Plan,
-  Policy,
-  Receipt,
-  Side,
-  Snapshot,
-} from "../types.ts";
+import type { ConfirmedFill, Plan, Policy, Receipt, Snapshot } from "../types.ts";
 
 export class ExecutionError extends Error {
   constructor(message: string) {
@@ -184,9 +176,11 @@ async function executeOnchain(opts: ExecuteOptions): Promise<ConfirmedFill[]> {
       filledBaseQty: filledBase,
       filledQuoteQty: filledQuote,
       avgPrice: filledBase > 0 ? filledQuote / filledBase : 0,
-      // Gas is paid in the chain's native asset, separately from the swap.
-      feeAsset: "BNB",
-      feeAmount: 0,
+      // The pool fee is taken inside the swap and is already reflected in the
+      // amount received, so there is no separate commission to report. Gas is
+      // paid in the chain's native asset and is not a commission either.
+      fees: [],
+      totalFeeInQuote: 0,
       isMaker: false,
       reference: order.txHash ?? order.orderId,
       confirmedBy: order.txHash

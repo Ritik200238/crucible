@@ -65,6 +65,7 @@ export function hashSnapshot(s: Omit<Snapshot, "hash">): string {
     JSON.stringify([
       s.symbol,
       s.takenAt,
+      s.mid,
       s.bestBid,
       s.bestAsk,
       s.book.lastUpdateId,
@@ -73,6 +74,12 @@ export function hashSnapshot(s: Omit<Snapshot, "hash">): string {
       s.filters.stepSize,
       s.filters.tickSize,
       s.filters.minNotional,
+      // The asset names are not decoration: the wallet's service fee is decided
+      // by which assets are being swapped, and that is worth 50 basis points on
+      // its own. A snapshot that differed only here would otherwise hash the
+      // same and price differently.
+      s.filters.baseAsset,
+      s.filters.quoteAsset,
       s.commission.maker,
       s.commission.taker,
       s.commission.source,

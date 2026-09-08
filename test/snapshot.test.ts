@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { depthWithin, hashSnapshot, queueAhead, walkBook } from "../src/snapshot.ts";
-import type { BookLevel, OnchainQuote, OrderBook, Snapshot } from "../src/types.ts";
+import type { BookLevel, OnchainQuote, OrderBook, Snapshot, WalletQuote } from "../src/types.ts";
 
 // BNBUSDT on a quiet afternoon: a two-cent spread, ten levels a side, five BNB
 // resting on each. The ladder is deliberately regular so every expected number
@@ -302,11 +302,32 @@ test("hashSnapshot changes when the on-chain tiers, size or gas price change", (
     "an extra tier answering",
   );
 
-  assert.notEqual(hashSnapshot(makeSnapshot({ onchain: { ...makeOnchain(), amountIn: 7521 } })), base);
+  const withAmountIn = makeSnapshot({ onchain: { ...makeOnchain(), amountIn: 7521 } });
+  assert.notEqual(hashSnapshot(withAmountIn), base);
   assert.notEqual(
     hashSnapshot(makeSnapshot({ onchain: { ...makeOnchain(), gasPriceWei: 1_100_000_000 } })),
     base,
   );
+});
+
+test("hashSnapshot changes when the wallet's own quote appears or moves", () => {
+  const base = hashSnapshot(makeSnapshot({ onchain: makeOnchain() }));
+  const quoted = (walletQuote: WalletQuote): string =>
+    hashSnapshot(makeSnapshot({ onchain: { ...makeOnchain(), walletQuote } }));
+
+  // The second opinion on the price is part of what the decision may read, so
+  // it has to be part of what the decision is replayed against.
+  const wallet: WalletQuote = {
+    fromSymbol: "USDT",
+    toSymbol: "BNB",
+    amountIn: 7520,
+    amountOut: 9.9791,
+    slippage: 0.005,
+  };
+
+  assert.notEqual(quoted(wallet), base, "a wallet quote arriving");
+  assert.notEqual(quoted({ ...wallet, amountOut: 9.98 }), quoted(wallet), "a different payout");
+  assert.notEqual(quoted({ ...wallet, amountIn: 7521 }), quoted(wallet), "a different input");
 });
 
 test("hashSnapshot does not depend on the order the keys were written in", () => {
@@ -346,14 +367,22 @@ test("hashSnapshot does not depend on the order the keys were written in", () =>
   assert.equal(hashSnapshot(shuffled), hashSnapshot(ordered));
 });
 
-test("hashSnapshot covers mid only through the touch prices it is derived from", () => {
-  // takeSnapshot sets mid to the midpoint of bestBid and bestAsk, and both of
-  // those are hashed, so a captured snapshot cannot move mid on its own. A
-  // hand-built one can, and the hash does not see it. Pinned here so the gap is
-  // visible rather than assumed covered.
-  assert.equal(hashSnapshot(makeSnapshot({ mid: 900 })), hashSnapshot(makeSnapshot()));
+test("hashSnapshot covers mid directly, not only through the touch prices", () => {
+  // mid is read by resolveQty and by every cost function, so two snapshots that
+  // differ only there must not share a hash. On the live path mid is derived
+  // from the touch, but a snapshot rebuilt from storage or built by hand can
+  // move it independently.
+  assert.notEqual(hashSnapshot(makeSnapshot({ mid: 900 })), hashSnapshot(makeSnapshot()));
 
-  // Moving the touch, which is how mid actually moves, does change the hash.
+  // Moving the touch, which is how mid actually moves, changes it too.
   const wider = makeSnapshot({ bestBid: 751.5, bestAsk: 752.5 });
   assert.notEqual(hashSnapshot(wider), hashSnapshot(makeSnapshot()));
+});
+
+test("hashSnapshot covers the asset names, which decide the wallet fee", () => {
+  // walletServiceFeeRate reads these and the answer is worth 50 bps, so they
+  // cannot be left outside the hash.
+  const renamed = makeSnapshot();
+  renamed.filters = { ...renamed.filters, quoteAsset: "OTHERCOIN" };
+  assert.notEqual(hashSnapshot(renamed), hashSnapshot(makeSnapshot()));
 });

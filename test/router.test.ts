@@ -146,7 +146,10 @@ const buy = (over: Partial<Intent> = {}): Intent => ({
 
 test("resolveQty turns a quote size into a base size at the snapshot mid", () => {
   assert.equal(resolveQty({ symbol: "BNBUSDT", side: "BUY", quoteQty: 7520 }, makeSnapshot()), 10);
-  assert.equal(resolveQty({ symbol: "BNBUSDT", side: "BUY", quoteQty: 500 }, makeSnapshot()), 0.664);
+
+  // The same dollars against a higher mid buy less.
+  const richer = makeSnapshot({ mid: 940 });
+  assert.equal(resolveQty({ symbol: "BNBUSDT", side: "BUY", quoteQty: 7520 }, richer), 8);
 });
 
 test("resolveQty passes a base size through untouched when it already fits the step", () => {
@@ -197,20 +200,14 @@ test("resolveQty refuses an intent that names no size at all", () => {
   );
 });
 
-test("resolveQty takes baseQty and drops quoteQty when an intent carries both", () => {
-  // The error message above promises "exactly one", but a contradictory intent
-  // is resolved rather than refused: baseQty wins and the quote size is
-  // silently ignored. Pinned here because the receipt keeps the whole intent,
-  // so the discarded half stays visible in the audit trail.
-  const contradictory: Intent = { symbol: "BNBUSDT", side: "BUY", baseQty: 2, quoteQty: 7520 };
-
-  assert.equal(resolveQty(contradictory, makeSnapshot()), 2);
+test("resolveQty refuses an intent that carries both sizes", () => {
+  // Both set is a contradiction. Silently preferring one would leave the other
+  // in the plan and the receipt, so the record would show a size never traded.
+  assert.throws(
+    () => resolveQty({ symbol: "BNBUSDT", side: "BUY", baseQty: 1, quoteQty: 5000 }, makeSnapshot()),
+    /both/i,
+  );
 });
-
-// ---------------------------------------------------------------------------
-// route
-// ---------------------------------------------------------------------------
-
 test("route takes the cheapest route available", () => {
   const cheapPool = route({ intent: buy(), snapshot: onchainCheaper(), policy: policy() });
   assert.equal(cheapPool.chosen.venue, "ONCHAIN");

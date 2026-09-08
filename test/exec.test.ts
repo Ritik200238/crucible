@@ -519,14 +519,15 @@ test("commission charged in one asset is summed across the trades", () => {
     FILTERS,
   );
 
-  assert.equal(fill.feeAsset, "BNB");
+  assert.equal(fill.fees.length, 1);
+  assert.equal(fill.fees[0]!.asset, "BNB");
   assert.ok(
-    Math.abs(fill.feeAmount - 0.0015) < 1e-12,
-    `expected the two commissions to add up, got ${fill.feeAmount}`,
+    Math.abs(fill.fees[0]!.amount - 0.0015) < 1e-12,
+    `expected the two commissions to add up, got ${fill.fees[0]!.amount}`,
   );
 });
 
-test("the largest commission wins when the trades were charged in different assets", () => {
+test("commissions in different assets are all carried, never reduced to one", () => {
   const fill = toConfirmedFill(
     rawOrder(),
     [
@@ -536,8 +537,48 @@ test("the largest commission wins when the trades were charged in different asse
     FILTERS,
   );
 
-  assert.equal(fill.feeAsset, "USDT");
-  assert.equal(fill.feeAmount, 0.9);
+  assert.equal(fill.fees.length, 2, "both assets survive");
+  const bnb = fill.fees.find((f) => f.asset === "BNB")!;
+  const usdt = fill.fees.find((f) => f.asset === "USDT")!;
+  assert.equal(bnb.amount, 0.002);
+  assert.equal(usdt.amount, 0.9);
+});
+
+test("a fee in the base asset is priced at the fill price, not compared raw", () => {
+  // 0.002 BNB at ~752 is about $1.50, so it outweighs 0.90 USDT despite being
+  // the smaller raw number. Picking by magnitude across assets got this wrong.
+  const fill = toConfirmedFill(
+    rawOrder(),
+    [
+      rawTrade({ id: 1, commissionAsset: "BNB", commission: "0.00200000" }),
+      rawTrade({ id: 2, commissionAsset: "USDT", commission: "0.90000000" }),
+    ],
+    FILTERS,
+  );
+
+  const bnb = fill.fees.find((f) => f.asset === "BNB")!;
+  assert.ok(bnb.valueInQuote !== null, "a base-asset fee is priceable from the fill");
+  assert.ok(
+    bnb.valueInQuote! > 0.9,
+    `0.002 BNB should be worth more than 0.90 USDT, got ${bnb.valueInQuote}`,
+  );
+  assert.ok(
+    Math.abs(fill.totalFeeInQuote! - (0.9 + bnb.valueInQuote!)) < 1e-9,
+    "the total is the sum of both, not the larger of them",
+  );
+});
+
+test("a fee in an asset that is neither leg is reported unpriced, not as zero", () => {
+  const fill = toConfirmedFill(
+    rawOrder(),
+    [rawTrade({ id: 1, commissionAsset: "TUSD", commission: "0.50000000" })],
+    FILTERS,
+  );
+
+  assert.equal(fill.fees[0]!.asset, "TUSD");
+  assert.equal(fill.fees[0]!.amount, 0.5);
+  assert.equal(fill.fees[0]!.valueInQuote, null, "unknown rate is null, never 0");
+  assert.equal(fill.totalFeeInQuote, null, "nothing priceable means no total to claim");
 });
 
 test("isMaker is null when the trades disagree about it", () => {
@@ -592,10 +633,10 @@ test("a CANCELED order that never filled is a failure", () => {
 
   assert.equal(fill.status, "FAILED");
   assert.equal(fill.avgPrice, 0);
-  assert.equal(fill.feeAmount, 0);
-  // With no trades there is no commission asset to report, so the symbol's own
-  // quote asset stands in rather than an empty string.
-  assert.equal(fill.feeAsset, "USDT");
+  // No trades means no commission was charged at all, which is a genuine zero
+  // rather than an unpriceable one.
+  assert.deepEqual(fill.fees, []);
+  assert.equal(fill.totalFeeInQuote, 0);
   assert.equal(fill.isMaker, null);
 });
 

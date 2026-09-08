@@ -11,7 +11,7 @@
  * limitations in the body rather than in a footnote.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { isSample, readSamples, type Sample } from "./run.ts";
 import { summarise, type Bucket, type EvidenceReport } from "./analyse.ts";
@@ -153,6 +153,43 @@ the snapshot hash each price was taken from.
 `;
 }
 
+const README_BEGIN = "<!-- EVIDENCE:BEGIN";
+const README_END = "<!-- EVIDENCE:END -->";
+
+/**
+ * Rewrite the README's evidence block from the same data.
+ *
+ * The headline table is quoted in two places, and a figure typed into one of
+ * them drifts the moment another sample lands. Generating both from one source
+ * removes the chance of the README claiming something the data no longer says.
+ */
+export function updateReadme(report: EvidenceReport, readmePath = "README.md"): boolean {
+  const full = resolve(process.cwd(), readmePath);
+  let text: string;
+  try {
+    text = readFileSync(full, "utf8");
+  } catch {
+    return false;
+  }
+
+  const begin = text.indexOf(README_BEGIN);
+  const end = text.indexOf(README_END);
+  if (begin === -1 || end === -1 || end < begin) return false;
+
+  const beginLineEnd = text.indexOf("\n", begin);
+  const block = [
+    "",
+    bucketTable(report.buckets),
+    "",
+    `Measured across ${report.total} samples spanning ${report.spanHours.toFixed(1)} hours. ` +
+      `On-chain was cheaper in ${pct(report.onchainWinRate)} of them.`,
+    "",
+  ].join("\n");
+
+  writeFileSync(full, text.slice(0, beginLineEnd + 1) + block + text.slice(end), "utf8");
+  return true;
+}
+
 export function generateReport(samplePath?: string, outPath = REPORT_PATH): {
   path: string;
   report: EvidenceReport;
@@ -172,6 +209,7 @@ export function generateReport(samplePath?: string, outPath = REPORT_PATH): {
   const full = resolve(process.cwd(), outPath);
   mkdirSync(dirname(full), { recursive: true });
   writeFileSync(full, renderReport(report, rows.length), "utf8");
+  updateReadme(report);
   return { path: full, report };
 }
 

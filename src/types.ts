@@ -226,6 +226,22 @@ export interface Plan {
 
 export type FillStatus = "FILLED" | "PARTIAL" | "FAILED" | "PENDING";
 
+/** Commission charged, in the asset it was actually charged in. */
+export interface FeeCharge {
+  asset: string;
+  amount: number;
+  /**
+   * Value in the quote asset, when it can be established.
+   *
+   * Null rather than zero when the rate is unknown. An exchange can split one
+   * order's commission across assets, and the amounts are not comparable as raw
+   * numbers: 0.002 BNB is worth more than 0.9 USDT. Reporting an unpriced fee as
+   * zero would understate the cost of exactly the fills that are hardest to
+   * price.
+   */
+  valueInQuote: number | null;
+}
+
 /** A fill as re-read from the venue, never as returned by the placing call. */
 export interface ConfirmedFill {
   venue: Venue;
@@ -233,8 +249,10 @@ export interface ConfirmedFill {
   filledBaseQty: number;
   filledQuoteQty: number;
   avgPrice: number;
-  feeAsset: string;
-  feeAmount: number;
+  /** Every asset the commission was taken in. Never reduced to one. */
+  fees: FeeCharge[];
+  /** Sum of the fees that could be priced. Null when none could be. */
+  totalFeeInQuote: number | null;
   isMaker: boolean | null;
   /** Exchange order id, or the on-chain transaction hash. */
   reference: string;

@@ -337,7 +337,9 @@ server.registerTool(
         ...receipt.fills.map(
           (f) =>
             `${f.status} on ${venueName(f.venue)}: ${f.filledBaseQty} base for ${f.filledQuoteQty} quote ` +
-            `at ${f.avgPrice}, fee ${f.feeAmount} ${f.feeAsset}${f.isMaker === null ? "" : f.isMaker ? ", maker" : ", taker"} ` +
+            `at ${f.avgPrice}, fees ${f.fees.length === 0 ? "none" : f.fees.map((c) => `${c.amount} ${c.asset}`).join(" + ")}` +
+            `${f.totalFeeInQuote === null ? " (not all priceable in the quote asset)" : ""}` +
+            `${f.isMaker === null ? "" : f.isMaker ? ", maker" : ", taker"} ` +
             `— reference ${f.reference}, confirmed by ${f.confirmedBy}`,
         ),
       ];

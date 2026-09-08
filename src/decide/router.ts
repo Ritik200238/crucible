@@ -60,15 +60,25 @@ export function hashPolicy(policy: Policy): string {
  * rejected on precision — both after the routing work is already done.
  */
 export function resolveQty(intent: Intent, snapshot: Snapshot): number {
-  const raw =
-    intent.baseQty !== undefined
-      ? intent.baseQty
-      : intent.quoteQty !== undefined
-        ? intent.quoteQty / snapshot.mid
-        : NaN;
+  const hasBase = intent.baseQty !== undefined;
+  const hasQuote = intent.quoteQty !== undefined;
 
-  if (!Number.isFinite(raw) || raw <= 0) {
+  // Both set is a contradiction, not a preference to resolve quietly. Picking
+  // one would leave the other in the plan and in the receipt, so the audit trail
+  // would record a size that was never traded.
+  if (hasBase && hasQuote) {
+    throw new RouteError(
+      `This intent carries both baseQty (${intent.baseQty}) and quoteQty (${intent.quoteQty}). ` +
+        `They disagree about the size, so neither is used. Give exactly one.`,
+    );
+  }
+  if (!hasBase && !hasQuote) {
     throw new RouteError("Specify exactly one of baseQty or quoteQty, greater than zero.");
+  }
+
+  const raw = hasBase ? intent.baseQty! : intent.quoteQty! / snapshot.mid;
+  if (!Number.isFinite(raw) || raw <= 0) {
+    throw new RouteError("The size must be a finite number greater than zero.");
   }
 
   const qty = roundToStep(raw, snapshot.filters.stepSize);

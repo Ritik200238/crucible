@@ -273,7 +273,9 @@ test("fillProbability is zero when nothing is arriving on that side", () => {
 
   assert.equal(fillProbability(oneSided, "BUY", 5), 0);
   assert.ok(fillProbability(oneSided, "SELL", 5) > 0, "the other side is still trading");
-  assert.equal(fillProbability(makeSnapshot({ flow: { hitsBidPerSec: 0, liftsAskPerSec: 0, windowSec: 60 } }), "SELL", 5), 0);
+
+  const dead = makeSnapshot({ flow: { hitsBidPerSec: 0, liftsAskPerSec: 0, windowSec: 60 } });
+  assert.equal(fillProbability(dead, "SELL", 5), 0);
 });
 
 test("fillProbability reads hits into the bid for a BUY and lifts of the ask for a SELL", () => {
@@ -292,7 +294,9 @@ test("fillProbability reads hits into the bid for a BUY and lifts of the ask for
 test("fillProbability never claims better than a 95% chance", () => {
   // 180 BNB of flow against a queue of 6 is certainty as far as the maths goes.
   assert.equal(fillProbability(makeSnapshot(), "BUY", 1), 0.95);
-  assert.equal(fillProbability(makeSnapshot({ flow: { hitsBidPerSec: 500, liftsAskPerSec: 500, windowSec: 60 } }), "BUY", 40), 0.95);
+
+  const torrent = makeSnapshot({ flow: { hitsBidPerSec: 500, liftsAskPerSec: 500, windowSec: 60 } });
+  assert.equal(fillProbability(torrent, "BUY", 40), 0.95);
 });
 
 // ---------------------------------------------------------------------------
