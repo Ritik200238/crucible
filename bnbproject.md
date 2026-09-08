@@ -147,12 +147,16 @@ this the result is a labelled fallback, never a wrong number presented as the
 account's — which the tests pin by breaking the decoder, the auth header and
 the cache in turn.
 
-One thing is deliberately left unapplied: the BNB fee discount. The account
-reports a factor of 0.75; Binance's docs caption the same field "reduced by
-this rate" beside examples of both 0.25 and 0.75, and its published spot
-discount is 25%. The reading that fits is "fraction paid", making the effective
-taker rate 7.50 bps, but that is an inference. A real fill's commission is the
-only test, so the quote uses the standard rate and says why.
+The BNB fee discount was settled by a real fill rather than by reading. The
+docs caption `discount.discount` as the rate the commission is "reduced by"
+and show it as both 0.25 and 0.75 in different examples of the same field, so
+the wording could not say whether 0.75 meant the discount or the fraction
+remaining. On 2026-09-08 order 7070626547 bought 0.013 BNB at a standard 0.1%
+with the field reporting 0.75, and was charged 0.00000975 BNB — 7.5 basis
+points, which is 0.75 x 0.1%. It is the fraction still paid. The discount is
+applied from that point, the standard rate is kept and reported beside it, and
+the note says the discount lapses when the account runs out of BNB to pay fees
+with.
 
 ### Stage 2 — the cost model
 
@@ -282,7 +286,7 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 18 files, ~8,316 lines, **474 tests, all passing** |
+| Tests | 18 files, ~8,363 lines, **477 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
@@ -466,7 +470,7 @@ node --experimental-strip-types src/cli.ts status                               
 node --experimental-strip-types src/cli.ts policy                                  # what is protecting you
 node --experimental-strip-types src/cli.ts samples                                 # the evidence so far
 
-npm test              # 474 tests
+npm test              # 477 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```

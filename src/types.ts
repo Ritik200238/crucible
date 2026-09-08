@@ -77,6 +77,14 @@ export interface CommissionRates {
   source: "account" | "vip0-default";
   /** How a real rate was obtained. Absent for the public schedule. */
   via?: "agent-os" | "api-key";
+  /**
+   * The published rate before a fee discount, when one is being applied.
+   *
+   * `maker` and `taker` above are what the account actually pays. This is what
+   * it would pay without the discount — kept because the discount lapses when
+   * the account runs out of BNB to pay fees with.
+   */
+  standard?: { maker: number; taker: number };
   /** Where the figure came from, or why the fallback is in use. For the status screen. */
   detail?: string;
 }

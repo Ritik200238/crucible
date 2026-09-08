@@ -66,15 +66,17 @@ async function lookup(symbol: string, opts: ResolveOptions): Promise<CommissionR
       const c = await fetchAccountCommission(client, symbol);
       if (c) {
         return {
-          maker: c.maker,
-          taker: c.taker,
+          maker: c.effectiveMaker,
+          taker: c.effectiveTaker,
           source: "account",
           via: "agent-os",
+          ...(c.discount?.enabled ? { standard: { maker: c.maker, taker: c.taker } } : {}),
           detail:
             `Read from your account through Binance Agent OS (session from ${token.source === "env" ? "BINANCE_MCP_TOKEN" : "Claude Code"}).` +
             (c.discount?.enabled
-              ? ` A BNB fee discount is on (factor ${c.discount.rate} reported; Binance's published spot discount is 25%, ` +
-                `so the effective rate is likely ${(c.taker * c.discount.rate * 10_000).toFixed(2)} bps). Not applied until a real fill confirms how the factor reads.`
+              ? ` Standard rate ${(c.taker * 10_000).toFixed(2)} bps, less the ${((1 - c.discount.factor) * 100).toFixed(0)}% BNB fee discount, ` +
+                `so ${(c.effectiveTaker * 10_000).toFixed(2)} bps is charged. The discount holds while the account has BNB to pay fees with; ` +
+                `without it the standard rate applies.`
               : ""),
         };
       }
@@ -99,11 +101,17 @@ async function lookup(symbol: string, opts: ResolveOptions): Promise<CommissionR
     });
     const c = await client.accountCommission(symbol);
     return {
-      maker: c.maker,
-      taker: c.taker,
+      maker: c.effectiveMaker,
+      taker: c.effectiveTaker,
       source: "account",
       via: "api-key",
-      detail: `Read from your account with the API key in the environment (${baseUrl}).`,
+      ...(c.discount?.enabled ? { standard: { maker: c.maker, taker: c.taker } } : {}),
+      detail:
+        `Read from your account with the API key in the environment (${baseUrl}).` +
+        (c.discount?.enabled
+          ? ` Standard rate ${(c.taker * 10_000).toFixed(2)} bps, less the ${((1 - c.discount.factor) * 100).toFixed(0)}% BNB fee discount, ` +
+            `so ${(c.effectiveTaker * 10_000).toFixed(2)} bps is charged.`
+          : ""),
     };
   } catch (err) {
     const message = (err as Error).message;

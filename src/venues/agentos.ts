@@ -257,10 +257,41 @@ function parseReply(body: string, contentType: string, id: number): JsonRpcReply
 
 export interface AccountCommission {
   symbol: string;
+  /** The published rate before any fee discount. */
   maker: number;
   taker: number;
-  /** BNB-payment discount, as documented, when the account has it on. */
-  discount: { enabled: boolean; rate: number } | null;
+  /** What the account actually pays, with the BNB discount applied when it is on. */
+  effectiveMaker: number;
+  effectiveTaker: number;
+  /**
+   * The BNB-payment discount.
+   *
+   * `factor` is the fraction of the standard commission still paid, so 0.75
+   * means a 25% discount. See the note above `applyDiscount` for how that was
+   * established.
+   */
+  discount: { enabled: boolean; factor: number } | null;
+}
+
+/**
+ * What the account really pays, given the discount field.
+ *
+ * Binance's docs describe `discount.discount` as the rate the standard
+ * commission is "reduced by", and show it as both 0.25 and 0.75 in different
+ * examples of the same field — so the wording alone cannot settle whether the
+ * number is the discount or the fraction remaining.
+ *
+ * A real fill settled it. On 2026-09-08, order 7070626547 on Binance Demo Mode
+ * bought 0.013 BNB against a standard rate of 0.1% with `discount` reporting
+ * 0.75, and was charged 0.00000975 BNB — 7.5 basis points, which is 0.75 x 0.1%.
+ * The field is therefore the fraction still paid.
+ *
+ * The discount only holds while the account has BNB to pay fees with. When it
+ * runs out the exchange charges the standard rate in the traded asset instead,
+ * which is why the standard figure is kept and reported alongside.
+ */
+function applyDiscount(rate: number, discount: { enabled: boolean; factor: number } | null): number {
+  return discount?.enabled ? rate * discount.factor : rate;
 }
 
 /** The commission tool's name is matched loosely, since only its suffix is documented. */
@@ -315,14 +346,22 @@ export async function fetchAccountCommission(
   }
 
   const d = r.discount;
-  const discountRate = Number(d?.discount);
+  const factor = Number(d?.discount);
+  // A factor outside (0, 1] is not a fraction of a commission. Treating one as
+  // a discount would cut the quoted fee by an arbitrary amount, so an
+  // unusable value simply means no discount is applied.
+  const usable = Number.isFinite(factor) && factor > 0 && factor <= 1;
   const discount =
-    d && typeof d.enabledForAccount === "boolean"
-      ? {
-          enabled: d.enabledForAccount === true && d.enabledForSymbol !== false,
-          rate: Number.isFinite(discountRate) ? discountRate : 0,
-        }
+    d && typeof d.enabledForAccount === "boolean" && usable
+      ? { enabled: d.enabledForAccount === true && d.enabledForSymbol !== false, factor }
       : null;
 
-  return { symbol: r.symbol ?? symbol.toUpperCase(), maker, taker, discount };
+  return {
+    symbol: r.symbol ?? symbol.toUpperCase(),
+    maker,
+    taker,
+    effectiveMaker: applyDiscount(maker, discount),
+    effectiveTaker: applyDiscount(taker, discount),
+    discount,
+  };
 }

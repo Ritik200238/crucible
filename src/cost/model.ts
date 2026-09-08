@@ -138,7 +138,10 @@ export function costBinanceTaker(input: CostInput): CostEstimate {
       bps: s.commission.taker * BPS,
       detail:
         s.commission.source === "account"
-          ? `Your account's taker rate, ${(s.commission.taker * 100).toFixed(4)}%, read ${s.commission.via === "agent-os" ? "through Binance Agent OS" : "with your API key"}.`
+          ? `Your account's taker rate, ${(s.commission.taker * 100).toFixed(4)}%, read ${s.commission.via === "agent-os" ? "through Binance Agent OS" : "with your API key"}` +
+            (s.commission.standard
+              ? `, after the BNB fee discount on a standard ${(s.commission.standard.taker * 100).toFixed(4)}%.`
+              : ".")
           : `Public VIP 0 taker rate, ${(s.commission.taker * 100).toFixed(4)}%. Your real rate may be lower.`,
       estimated: s.commission.source !== "account",
     },

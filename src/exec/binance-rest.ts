@@ -259,7 +259,9 @@ export class BinanceRest {
     symbol: string;
     maker: number;
     taker: number;
-    discount: { enabled: boolean; rate: number } | null;
+    effectiveMaker: number;
+    effectiveTaker: number;
+    discount: { enabled: boolean; factor: number } | null;
   }> {
     const raw = await this.request<{
       symbol: string;
@@ -274,13 +276,24 @@ export class BinanceRest {
         `The commission reply for ${symbol} did not carry numeric maker/taker rates: ${JSON.stringify(raw).slice(0, 200)}`,
       );
     }
+    // `discount` is the fraction of the standard commission still paid, not the
+    // amount taken off. Established from a real fill; see applyDiscount in
+    // src/venues/agentos.ts for the arithmetic and the order it came from.
+    const factor = Number(raw.discount?.discount);
+    const usable = Number.isFinite(factor) && factor > 0 && factor <= 1;
+    const discount =
+      raw.discount && usable
+        ? { enabled: raw.discount.enabledForAccount && raw.discount.enabledForSymbol, factor }
+        : null;
+    const scale = discount?.enabled ? discount.factor : 1;
+
     return {
       symbol: raw.symbol,
       maker,
       taker,
-      discount: raw.discount
-        ? { enabled: raw.discount.enabledForAccount && raw.discount.enabledForSymbol, rate: Number(raw.discount.discount) || 0 }
-        : null,
+      effectiveMaker: maker * scale,
+      effectiveTaker: taker * scale,
+      discount,
     };
   }
 

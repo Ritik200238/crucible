@@ -507,7 +507,9 @@ async function cmdStatus(args: Map<string, string>): Promise<number> {
   const fees = await resolveCommission(symbol);
   console.log(
     fees.source === "account"
-      ? `  ${c.green("●")} Fees         ${symbol} maker ${(fees.maker * 10_000).toFixed(2)} bps, taker ${(fees.taker * 10_000).toFixed(2)} bps — ${fees.detail ?? "read from your account"}`
+      ? `  ${c.green("●")} Fees         ${symbol} maker ${(fees.maker * 10_000).toFixed(2)} bps, taker ${(fees.taker * 10_000).toFixed(2)} bps` +
+        (fees.standard ? c.dim(` (standard ${(fees.standard.taker * 10_000).toFixed(2)} bps)`) : "") +
+        ` — ${fees.detail ?? "read from your account"}`
       : `  ${c.yellow("○")} Fees         ${c.dim(`public VIP 0 schedule for ${symbol}. ${fees.detail?.replace(/^Public VIP 0 schedule\. /, "") ?? ""}`)}`,
   );
 

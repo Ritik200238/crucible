@@ -68,7 +68,7 @@ function fakeServer(handler: (method: string, params: unknown) => { status?: num
 
 const COMMISSION_REPLY = {
   symbol: "BNBUSDT",
-  standardCommission: { maker: "0.00075000", taker: "0.00075000", buyer: "0", seller: "0" },
+  standardCommission: { maker: "0.00100000", taker: "0.00100000", buyer: "0", seller: "0" },
   taxCommission: { maker: "0", taker: "0", buyer: "0", seller: "0" },
   discount: { enabledForAccount: true, enabledForSymbol: true, discountAsset: "BNB", discount: "0.75000000" },
 };
@@ -194,9 +194,14 @@ describe("reading the commission", () => {
     );
     const c = await fetchAccountCommission(new AgentOsClient("t", { fetchImpl: server.fetchImpl }), "bnbusdt");
     assert.ok(c);
-    assert.equal(c.maker, 0.00075);
-    assert.equal(c.taker, 0.00075);
-    assert.deepEqual(c.discount, { enabled: true, rate: 0.75 });
+    assert.equal(c.maker, 0.001, "the published rate is kept");
+    assert.equal(c.taker, 0.001);
+    // 0.75 is the fraction still paid, not the amount taken off. Established
+    // by a real fill: order 7070626547 paid 0.00000975 BNB on 0.013 BNB, which
+    // is 7.5 bps against a 10 bps standard rate.
+    assert.equal(c.effectiveTaker, 0.00075);
+    assert.equal(c.effectiveMaker, 0.00075);
+    assert.deepEqual(c.discount, { enabled: true, factor: 0.75 });
     // The symbol is sent upper-cased, as the exchange expects it.
     const call = server.requests.find((r) => r.method === "tools/call")!.params as { arguments: { symbol: string } };
     assert.equal(call.arguments.symbol, "BNBUSDT");
@@ -261,8 +266,50 @@ describe("which rate a quote is priced with", () => {
     const rates = await resolveCommission("BNBUSDT", { findToken: withToken, fetchImpl: server.fetchImpl, env: {} });
     assert.equal(rates.source, "account");
     assert.equal(rates.via, "agent-os");
+    // What the account pays, not what the schedule says.
     assert.equal(rates.taker, 0.00075);
+    assert.deepEqual(rates.standard, { maker: 0.001, taker: 0.001 });
     assert.match(rates.detail ?? "", /through Binance Agent OS/);
+    assert.match(rates.detail ?? "", /Standard rate 10\.00 bps, less the 25% BNB fee discount, so 7\.50 bps is charged/);
+    assert.match(rates.detail ?? "", /holds while the account has BNB/);
+  });
+
+  test("a discount that is off leaves the standard rate alone", async () => {
+    const off = { ...COMMISSION_REPLY, discount: { ...COMMISSION_REPLY.discount, enabledForAccount: false } };
+    const server = fakeServer((method) =>
+      method === "tools/list"
+        ? { body: { result: { tools: [{ name: "spot.accountCommission" }] } } }
+        : { body: toolResult(off) },
+    );
+    const rates = await resolveCommission("BNBUSDT", { findToken: withToken, fetchImpl: server.fetchImpl, env: {} });
+    assert.equal(rates.taker, 0.001);
+    assert.equal(rates.standard, undefined, "there is no discount to report");
+  });
+
+  test("a discount enabled for the account but not the symbol does not apply", async () => {
+    const off = { ...COMMISSION_REPLY, discount: { ...COMMISSION_REPLY.discount, enabledForSymbol: false } };
+    const server = fakeServer((method) =>
+      method === "tools/list"
+        ? { body: { result: { tools: [{ name: "spot.accountCommission" }] } } }
+        : { body: toolResult(off) },
+    );
+    const rates = await resolveCommission("BNBUSDT", { findToken: withToken, fetchImpl: server.fetchImpl, env: {} });
+    assert.equal(rates.taker, 0.001);
+  });
+
+  test("a factor outside (0, 1] is not treated as a discount", async () => {
+    // A field that is not a fraction of a commission cannot be one. Scaling by
+    // it would cut the quoted fee by an arbitrary amount and route on it.
+    for (const bad of ["0", "-0.5", "1.5", "not-a-number"]) {
+      const server = fakeServer((method) =>
+        method === "tools/list"
+          ? { body: { result: { tools: [{ name: "spot.accountCommission" }] } } }
+          : { body: toolResult({ ...COMMISSION_REPLY, discount: { ...COMMISSION_REPLY.discount, discount: bad } }) },
+      );
+      const c = await fetchAccountCommission(new AgentOsClient("t", { fetchImpl: server.fetchImpl }), "BNBUSDT");
+      assert.equal(c!.effectiveTaker, 0.001, `factor "${bad}" must not scale the rate`);
+      assert.equal(c!.discount, null);
+    }
   });
 
   test("a session that has expired falls back, and the reason names the reconnect step", async () => {
