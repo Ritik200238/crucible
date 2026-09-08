@@ -1,18 +1,22 @@
 {
-  "name": "guardrail",
+  "name": "crucible",
   "version": "0.1.0",
-  "description": "A policy firewall for Binance Agent OS. Every order your AI agent proposes is checked against your rules before it can reach Binance.",
+  "description": "Smart execution for Binance agents. Prices every order on Binance spot and on-chain, routes to whichever fills cheapest, gates it, and proves the result with a receipt.",
   "type": "module",
   "bin": {
-    "guardrail": "./dist/cli.js"
+    "crucible": "./dist/cli.js"
   },
-  "main": "./dist/mcp-server.js",
+  "main": "./dist/mcp/server.js",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
     "cli": "node --experimental-strip-types src/cli.ts",
-    "mcp": "node --experimental-strip-types src/mcp-server.ts",
-    "test": "node --experimental-strip-types --test test/*.test.ts"
+    "mcp": "node --experimental-strip-types src/mcp/server.ts",
+    "dashboard": "node --experimental-strip-types src/dashboard/server.ts",
+    "sampler": "node --experimental-strip-types src/sampler/run.ts",
+    "sample": "node --experimental-strip-types src/cli.ts sample",
+    "evidence": "node --experimental-strip-types src/sampler/report.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "engines": {
     "node": ">=22"

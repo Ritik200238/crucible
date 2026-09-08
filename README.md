@@ -1,0 +1,195 @@
+# Crucible
+
+**Smart execution for Binance agents.** Your agent decides *what* to trade.
+Crucible decides *where* and *how* — and proves what it cost.
+
+Built for the [Binance Agent OS Mini Hackathon](https://www.binance.com/en/blog/community/8802181509900814931), Track A.
+
+```
+  CRUCIBLE  BNBUSDT  snapshot 8be1a4208917a330
+  BUY 0.664000 BNB  ·  $499.33
+  mid 752.00500000   spread 0.13 bps   flow 1.16 BNB/s over 81s
+
+  ● on-chain taker                1.56 bps    $0.08
+      pool fee                 1.000   The 0.01% tier, chosen because it paid out most at this size.
+      venue divergence         0.364   The pool is trading 0.36 bps worse than the Binance mid right now.
+      price impact             0.079   How far this size pushes the pool past its own mid.
+      gas                      0.115   $0.0057 at 0.050 gwei, spread over $499.33.
+      wallet service fee       0.000   Free: BNB and USDT are both major assets.
+  ○ Binance spot maker            9.94 bps ~  $0.50
+  ○ Binance spot taker           10.07 bps ~  $0.50
+
+  plan 316db15a346e   fingerprint 316db15a346e6466
+  on-chain at 1.56 bps beats Binance spot maker at 9.94 bps, a saving of 8.38 bps.
+
+   CLEARED
+```
+
+That is a real run against live endpoints. Every number in it was measured, not
+assumed.
+
+## The problem
+
+An AI agent places a market order and pays the spread, the commission and the
+impact. Those three are routinely larger than the edge the strategy was chasing.
+Almost nothing measures them, and nothing chooses between venues per order.
+
+Binance Agent OS already gives an agent two ways to buy the same asset: the
+exchange, and on-chain through the Agentic Wallet. They do not cost the same, and
+which one is cheaper changes with the size of the order.
+
+## What it does
+
+For any order, at one instant:
+
+1. **Prices both venues.** Binance spot from the live book — commission, half
+   spread, and the impact of walking however many levels the size needs.
+   On-chain from the pool's own quoter on every fee tier, plus gas at the live
+   price and the wallet's service fee.
+2. **Picks the cheaper one,** and splits the order across time when a single
+   order would move the book past the limit you set.
+3. **Gates it.** Seventeen deterministic rules, including six specific to
+   execution: impact, slippage, resting depth, snapshot age, venue, and
+   disagreement between the two independent on-chain price sources.
+4. **Executes and confirms.** The fill is read back from the venue. The response
+   that placed the order is never treated as proof it happened.
+5. **Issues a receipt** comparing predicted cost to realised cost, and to what
+   the other venue would have charged.
+
+## What we found
+
+Measured, not asserted. Regenerate any of it with `npm run evidence`.
+
+| Pair | Order size | On-chain cheaper | Median on-chain | Median Binance | Median edge |
+|---|---|---|---|---|---|
+| BNBUSDT | $100 | 100% | 2.03 bps | 10.04 bps | **8.01 bps** |
+| BNBUSDT | $1,000 | 100% | 2.01 bps | 10.03 bps | **8.02 bps** |
+| BNBUSDT | $10,000 | 100% | 2.80 bps | 9.98 bps | **7.17 bps** |
+| BNBUSDT | $100,000 | 0% | 12.79 bps | 10.24 bps | −2.55 bps |
+| ETHUSDT | $1,000 | 100% | 4.75 bps | 10.01 bps | **5.27 bps** |
+| ETHUSDT | $10,000 | 0% | 16.74 bps | 10.01 bps | −6.73 bps |
+
+**The cheaper venue changes with size, and the crossover is different for each
+pair.** BNB/USDT stays cheaper on-chain up to about $10,000. ETH/USDT flips ten
+times earlier, because its pool is shallower.
+
+That is the entire argument for routing per order rather than picking a venue
+once and living with it.
+
+The gap comes almost entirely from the commission: 10 bps on Binance spot at
+VIP 0 against 1 bps in the deepest BNB/USDT pool, with no wallet fee between two
+major assets and gas under a tenth of a basis point. It shrinks on a better fee
+tier and it reverses on a large enough order. Full method, component breakdown
+and limits: [`docs/EXECUTION_EVIDENCE.md`](docs/EXECUTION_EVIDENCE.md).
+
+## Try it
+
+Node 22 or later. No API key needed — both venues are priced from public
+endpoints.
+
+```bash
+git clone <this repo> crucible && cd crucible && npm install
+
+npm run cli -- quote  --symbol BNBUSDT --usd 500        # price every route
+npm run cli -- route  --symbol BNBUSDT --usd 50000      # choose one, and gate it
+npm run cli -- route  --symbol BNBUSDT --usd 2000000    # watch the risk engine refuse
+npm run cli -- policy                                    # what is protecting you
+npm run cli -- samples                                   # the evidence so far
+```
+
+## Connect it to an agent
+
+```bash
+claude mcp add crucible -- node --experimental-strip-types /absolute/path/to/crucible/src/mcp/server.ts
+```
+
+| Tool | What it does |
+|---|---|
+| `quote` | Price every route. Decides nothing, sends nothing. |
+| `route` | Choose the cheapest, gate it, return a fingerprinted plan |
+| `execute` | Execute a plan by id, and confirm the fill |
+| `policy` | Which rules are in force |
+| `evidence` | The recorded venue comparison |
+| `verify_ledger` | Recompute the hash chain and check the signature |
+| `status` | Whether each execution path can actually be reached |
+
+`execute` takes **only a plan id**. The plan is the authorisation, so an agent
+cannot alter the order between the decision and the fill — any change produces a
+different plan, which has to clear the gates again.
+
+## How it is built
+
+**One snapshot, then pure functions.** Both venues are fetched concurrently and
+hashed into a single object. Nothing downstream reads a clock or a network, so
+the same snapshot always produces the same plan and the same fingerprint. That is
+what makes a decision checkable by someone who was not there when it was made.
+
+**Impact and divergence are separated.** The on-chain cost is split using a
+near-zero-size reference quote from the same pool. Measuring impact against the
+Binance mid would conflate how far the order pushes the pool with how far the
+pool had already drifted from the exchange, and only the first is a cost of
+trading.
+
+**Fill probability is measured, not guessed.** A resting order clears only once
+enough volume has crossed to work through the queue ahead of it plus itself, so
+the model reads real trade flow from the tape. A larger order is *less* likely to
+fill — the opposite of what a naive queue-ratio model says, and getting it
+backwards is how a tool ends up recommending a post because it is big.
+
+**A modelled route does not beat a measured one by a rounding error.** Posting at
+the touch saves the half spread, which on a liquid pair is a fraction of a basis
+point, while adding the risk of not filling at all. Crucible frequently concludes
+that posting is not worth it, and says so.
+
+**Refusals are recorded.** Every decision, allowed or blocked, is appended to a
+hash-chained ledger and the head is signed. A ledger that only holds successes is
+a marketing document.
+
+## Safety
+
+- **Two switches for live execution.** The policy must say `live` *and*
+  `CRUCIBLE_LIVE=1` must be set in the shell. A config file an agent could edit
+  is not on its own enough to move real money.
+- **No private keys.** The on-chain leg runs through the Agentic Wallet CLI,
+  which holds its own key and enforces its own daily limit and token scope. This
+  process can only ask.
+- **Unknown config keys are refused,** not ignored. A misspelling that silently
+  disables a limit is exactly the failure this exists to prevent.
+- **Risk-reducing orders keep their exemptions.** A cap that blocks the order
+  closing a losing position traps you in the trade you wanted out of.
+
+## Tests
+
+```bash
+npm test
+```
+
+The ledger was mutation-tested against seven ways of breaking it and caught all
+seven; the risk engine against seven more. Concurrent appends were checked for
+real: four processes writing at once keep the chain intact, and removing the lock
+breaks it at record five — so the lock is load-bearing, not decoration.
+
+## Honest limits
+
+Stated here rather than in a footnote, because a tool that measures small numbers
+has no business being vague about its own error.
+
+- **Maker cost is an estimate.** It is weighted by a fill probability derived
+  from measured flow, and the receipt's predicted-versus-realised error is the
+  check on whether that model is any good.
+- **The evidence span is short.** It shows the shape of the cost curve and where
+  the crossover sits. It does not describe a full market cycle.
+- **Two pairs, deep pools.** A thinner pair would look different.
+- **Fees default to the public VIP 0 schedule** when no account credential is
+  present, and every report says so. A real account usually pays less, which
+  narrows the gap this product reports.
+- **A quote is not a fill.** On-chain swaps can fail on slippage or liquidity;
+  maker orders can fail to fill. Both are reported as what they are.
+- **One operator, one policy.** Not multi-tenant.
+
+Crucible makes the trade you already decided on cost less. It does not know
+whether you should be making it.
+
+## Licence
+
+MIT. Not financial advice — you are responsible for the trades your agent places.
