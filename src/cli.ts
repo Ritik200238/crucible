@@ -95,7 +95,7 @@ async function resolveSnapshot(args: Map<string, string>): Promise<{
     baseQty = usd / probe.mid;
   }
 
-  const snapshot = await takeSnapshot({ symbol, side, baseQty });
+  const snapshot = await takeSnapshot({ symbol, side, baseQty, includeWalletQuote: true });
   return { snapshot, side, baseQty, symbol };
 }
 

@@ -22,6 +22,7 @@ import {
   VIP0,
 } from "./venues/binance.ts";
 import { quoteOnchain, OnchainError } from "./venues/onchain.ts";
+import { fetchWalletQuote } from "./venues/wallet-quote.ts";
 import type { CommissionRates, OrderBook, Side, Snapshot } from "./types.ts";
 
 export class SnapshotError extends Error {
@@ -40,6 +41,15 @@ export interface SnapshotOptions {
   commission?: CommissionRates;
   /** Skip the on-chain leg. Used by the Binance-only sampler path. */
   skipOnchain?: boolean;
+  /**
+   * Also ask the wallet for its own executable quote.
+   *
+   * Costs a subprocess, so it is off by default. The routing path turns it on,
+   * because that is where an order might actually be sent and where a second
+   * opinion on the price is worth a second of latency. The sampler leaves it
+   * off and prices from the pool alone.
+   */
+  includeWalletQuote?: boolean;
 }
 
 /**
@@ -74,6 +84,9 @@ export function hashSnapshot(s: Omit<Snapshot, "hash">): string {
             s.onchain.amountIn,
             s.onchain.gasPriceWei,
             s.onchain.tiers.map((t) => [t.feeTier, t.amountOut, t.gasEstimate]),
+            s.onchain.walletQuote
+              ? [s.onchain.walletQuote.amountIn, s.onchain.walletQuote.amountOut]
+              : null,
           ]
         : null,
     ]),
@@ -121,6 +134,16 @@ export async function takeSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
       // carried through to the report rather than silently becoming "no route".
       onchainUnavailable =
         err instanceof OnchainError ? err.message : `On-chain pricing failed: ${(err as Error).message}`;
+    }
+
+    if (onchain && opts.includeWalletQuote) {
+      onchain.walletQuote = await fetchWalletQuote({
+        baseAsset: filters.baseAsset,
+        quoteAsset: filters.quoteAsset,
+        side: opts.side,
+        baseQty: opts.baseQty,
+        midPrice: mid,
+      });
     }
   }
 

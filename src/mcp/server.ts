@@ -116,7 +116,12 @@ async function snapshotFor(args: {
     });
     baseQty = args.usd / probe.mid;
   }
-  const snapshot = await takeSnapshot({ symbol: args.symbol, side: args.side, baseQty });
+  const snapshot = await takeSnapshot({
+    symbol: args.symbol,
+    side: args.side,
+    baseQty,
+    includeWalletQuote: true,
+  });
   return { snapshot, baseQty };
 }
 
