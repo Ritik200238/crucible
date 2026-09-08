@@ -5,6 +5,19 @@ Crucible decides *where* and *how* — and proves what it cost.
 
 Built for the [Binance Agent OS Mini Hackathon](https://www.binance.com/en/blog/community/8802181509900814931), Track A.
 
+**Live, and read-only: [crucible-router.vercel.app](https://crucible-router.vercel.app)** — live quotes on both
+venues, the rules in force, twenty real executions graded against what they were
+predicted to cost, and a ledger you can verify in your own browser. Point an
+agent at it:
+
+```bash
+claude mcp add crucible --transport http https://crucible-router.vercel.app/mcp
+```
+
+Every read tool answers anyone. `execute` and `reconcile` refuse without the
+operator's token, and the instance holds no exchange credential, no wallet
+session and no signing key — so there is nothing there to execute with.
+
 ```
   CRUCIBLE  BNBUSDT  snapshot 389d3938b3e48d2c
   BUY 0.663469 BNB  ·  $500.00

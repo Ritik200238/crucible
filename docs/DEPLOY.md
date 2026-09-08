@@ -30,6 +30,30 @@ instance:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
+## Vercel — how the live instance runs
+
+`https://crucible-router.vercel.app` runs here. The dashboard handler already treats every request on its own
+and the MCP transport is stateless, so a serverless invocation per request fits
+without changing anything.
+
+```bash
+vercel link --yes
+echo "<the token>" | vercel env add CRUCIBLE_MCP_TOKEN production
+vercel --prod --yes
+```
+
+Three things are not obvious and each cost a deploy to find:
+
+- **Pick a region Binance answers.** Vercel defaults to Washington, D.C., and
+  Binance returns HTTP 451 to US addresses. `"regions": ["sin1"]` in
+  `vercel.json` fixes it; the on-chain side works from anywhere.
+- **Deployment protection is on by default**, which puts the whole thing behind
+  Vercel's SSO and makes it useless as a public demo. Turn it off under
+  Settings → Deployment Protection.
+- **The ledger cannot live in a dot-directory**, because the bundler will not
+  carry one. `CRUCIBLE_LEDGER_DIR=deploy/ledger` points at the copy that ships
+  in `includeFiles`.
+
 ## Koyeb
 
 A free instance, no card, and it stays up for an hour after the last request.
