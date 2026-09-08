@@ -79,7 +79,7 @@ function makeSnapshot(over: Partial<Omit<Snapshot, "hash">> = {}): Omit<Snapshot
       minNotional: 5,
     },
     commission: { maker: 0.001, taker: 0.001, source: "vip0-default" },
-    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60 },
+    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 },
     onchain: null,
     ...over,
   };
@@ -275,9 +275,9 @@ test("hashSnapshot changes when any hashed input changes", () => {
       "where the commission came from",
       makeSnapshot({ commission: { maker: 0.001, taker: 0.001, source: "account" } }),
     ],
-    ["hitsBidPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3.5, liftsAskPerSec: 3, windowSec: 60 } })],
-    ["liftsAskPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3.5, windowSec: 60 } })],
-    ["the flow window", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 61 } })],
+    ["hitsBidPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3.5, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } })],
+    ["liftsAskPerSec", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3.5, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } })],
+    ["the flow window", makeSnapshot({ flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 61, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 } })],
     ["an on-chain quote appearing", makeSnapshot({ onchain: makeOnchain() })],
   ];
 
@@ -337,7 +337,14 @@ test("hashSnapshot does not depend on the order the keys were written in", () =>
   // nested book and each of its levels.
   const shuffled: Omit<Snapshot, "hash"> = {
     onchain: null,
-    flow: { windowSec: 60, liftsAskPerSec: 3, hitsBidPerSec: 3 },
+    flow: {
+      adverseSamples: 400,
+      adverseSellBps: 0.5,
+      adverseBuyBps: 0.6,
+      windowSec: 60,
+      liftsAskPerSec: 3,
+      hitsBidPerSec: 3,
+    },
     commission: { source: "vip0-default", taker: 0.001, maker: 0.001 },
     filters: {
       minNotional: 5,

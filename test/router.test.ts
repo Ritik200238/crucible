@@ -114,7 +114,7 @@ function makeSnapshot(over: Partial<Snapshot> = {}): Snapshot {
     // Read from the account, so the Binance taker route carries no modelled
     // component and the estimate handicap can be tested deliberately.
     commission: { maker: 0.001, taker: 0.001, source: "account" },
-    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60 },
+    flow: { hitsBidPerSec: 3, liftsAskPerSec: 3, windowSec: 60, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 },
     onchain: null,
     hash: "1f0a7c4b2e9d6538",
     ...over,
@@ -320,7 +320,22 @@ test("route keeps a measured route over an estimated one that barely beats it", 
   // Posting saves the half spread and costs the chance of not filling. On a
   // two-cent spread that is a fraction of a bp either way, which is well inside
   // the error of guessing whether the order fills at all.
-  const plan = route({ intent: buy(), snapshot: makeSnapshot(), policy: policy() });
+  //
+  // The fixture zeroes adverse selection deliberately. With a real measured
+  // pick-off the maker route is simply more expensive and never gets close
+  // enough for the handicap to be what decides it, which would leave the rule
+  // under test never exercised.
+  const noPickOff = makeSnapshot({
+    flow: {
+      hitsBidPerSec: 3,
+      liftsAskPerSec: 3,
+      windowSec: 60,
+      adverseBuyBps: 0,
+      adverseSellBps: 0,
+      adverseSamples: 400,
+    },
+  });
+  const plan = route({ intent: buy(), snapshot: noPickOff, policy: policy() });
   const rejected = plan.alternatives[0]!;
 
   assert.equal(plan.chosen.style, "TAKER");

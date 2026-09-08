@@ -129,6 +129,21 @@ export async function fetchBookTicker(symbol: string): Promise<BookTicker> {
   };
 }
 
+/**
+ * Mid price alone, at weight 2.
+ *
+ * Sizing an order in dollars needs a price before the real snapshot can be
+ * taken at the right quantity. Doing that with a full snapshot costs the book,
+ * the filters and the tape as well, and every one of them is discarded — around
+ * thirty weight and half a second to learn one number.
+ */
+export async function fetchMid(symbol: string): Promise<number> {
+  const t = await fetchBookTicker(symbol);
+  const mid = (t.bidPrice + t.askPrice) / 2;
+  if (!(mid > 0)) throw new BinanceError(`${symbol.toUpperCase()} has no usable mid price.`);
+  return mid;
+}
+
 interface RawFilter {
   filterType: string;
   stepSize?: string;
@@ -156,8 +171,28 @@ interface RawSymbol {
  * notional under `minNotional`, is refused by Binance no matter how good the
  * routing decision was.
  */
-export async function fetchSymbolFilters(symbol: string): Promise<SymbolFilters> {
+/**
+ * Symbol filters, cached.
+ *
+ * This is the most expensive call the product makes at weight 20, and it
+ * returns rules that change on the order of weeks. Re-fetching it on every
+ * quote spent more weight than the book and the tape combined.
+ *
+ * The TTL is an hour rather than forever: a changed step size or minimum
+ * notional makes an order rejected outright, so the cache has to expire on its
+ * own rather than only on restart.
+ */
+const FILTER_TTL_MS = 60 * 60 * 1000;
+const filterCache = new Map<string, { at: number; filters: SymbolFilters }>();
+
+export function clearFilterCache(): void {
+  filterCache.clear();
+}
+
+export async function fetchSymbolFilters(symbol: string, now = Date.now()): Promise<SymbolFilters> {
   const upper = symbol.toUpperCase();
+  const cached = filterCache.get(upper);
+  if (cached && now - cached.at < FILTER_TTL_MS) return cached.filters;
   const raw = await get<{ symbols: RawSymbol[] }>(
     `/api/v3/exchangeInfo?symbol=${encodeURIComponent(upper)}`,
   );
@@ -176,7 +211,7 @@ export async function fetchSymbolFilters(symbol: string): Promise<SymbolFilters>
     throw new BinanceError(`${upper} is missing LOT_SIZE or PRICE_FILTER; cannot size an order safely.`);
   }
 
-  return {
+  const filters: SymbolFilters = {
     symbol: s.symbol,
     baseAsset: s.baseAsset,
     quoteAsset: s.quoteAsset,
@@ -188,6 +223,8 @@ export async function fetchSymbolFilters(symbol: string): Promise<SymbolFilters>
     tickSize: num(price.tickSize, "tickSize"),
     minNotional: notional?.minNotional ? num(notional.minNotional, "minNotional") : 0,
   };
+  filterCache.set(upper, { at: now, filters });
+  return filters;
 }
 
 /**
@@ -273,5 +310,95 @@ export function tradeRates(trades: AggTrade[]): {
     hitsBidPerSec: hitsBid / windowSec,
     liftsAskPerSec: liftsAsk / windowSec,
     windowSec,
+  };
+}
+
+
+/** How far the market moves against a passive fill, measured from the tape. */
+export interface AdverseSelection {
+  /** Cost in bps to an order resting on the bid. Positive means it hurt. */
+  restingBuyBps: number;
+  /** Cost in bps to an order resting on the ask. */
+  restingSellBps: number;
+  /** Fills each figure was averaged over. A small count is a weak measurement. */
+  samples: number;
+  horizonMs: number;
+}
+
+/**
+ * Adverse selection, measured rather than assumed.
+ *
+ * This is the cost that makes passive execution harder than it looks, and it is
+ * the one most cost models leave out. A resting bid does not fill at random: it
+ * fills when someone chose to sell into it, and that someone is more often right
+ * than wrong over the next few seconds. So the fill is systematically worse than
+ * the price it printed at.
+ *
+ * It is computed here by asking what actually happened after each passive fill
+ * in the recent tape: take every trade where a seller crossed into the bid, and
+ * compare its price against the volume-weighted price of everything that traded
+ * in the following few seconds. If the market kept falling, a buyer resting on
+ * that bid was picked off, and by how much.
+ *
+ * The sign convention is that positive is a cost. A negative figure means flow
+ * in this window was uninformative and passive fills came out ahead, which does
+ * happen over short samples and is reported as measured rather than floored at
+ * zero.
+ */
+export function adverseSelection(trades: AggTrade[], horizonMs = 5000): AdverseSelection {
+  const empty: AdverseSelection = {
+    restingBuyBps: 0,
+    restingSellBps: 0,
+    samples: 0,
+    horizonMs,
+  };
+  if (trades.length < 20) return empty;
+
+  // aggTrades arrives oldest first, so a forward pointer over a sorted series
+  // avoids rescanning the tape for every fill.
+  const sorted = [...trades].sort((a, b) => a.time - b.time);
+
+  let buySum = 0;
+  let buyCount = 0;
+  let sellSum = 0;
+  let sellCount = 0;
+
+  let head = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const fill = sorted[i]!;
+    while (head < sorted.length && sorted[head]!.time <= fill.time) head++;
+
+    let notional = 0;
+    let volume = 0;
+    for (let j = head; j < sorted.length && sorted[j]!.time <= fill.time + horizonMs; j++) {
+      notional += sorted[j]!.price * sorted[j]!.qty;
+      volume += sorted[j]!.qty;
+    }
+    // Too little traded afterwards to say anything about where the price went.
+    if (volume <= 0) continue;
+
+    const after = notional / volume;
+    const driftBps = ((after - fill.price) / fill.price) * 10_000;
+
+    if (fill.buyerIsMaker) {
+      // A seller crossed into the bid, so a resting buyer was filled here. The
+      // market falling afterwards is a cost to that buyer.
+      buySum += -driftBps;
+      buyCount++;
+    } else {
+      // A buyer lifted the ask, filling a resting seller. The market rising
+      // afterwards is a cost to that seller.
+      sellSum += driftBps;
+      sellCount++;
+    }
+  }
+
+  if (buyCount === 0 && sellCount === 0) return empty;
+
+  return {
+    restingBuyBps: buyCount > 0 ? buySum / buyCount : 0,
+    restingSellBps: sellCount > 0 ? sellSum / sellCount : 0,
+    samples: Math.min(buyCount, sellCount),
+    horizonMs,
   };
 }

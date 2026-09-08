@@ -132,6 +132,14 @@ export interface TradeFlow {
   liftsAskPerSec: number;
   /** Seconds the measurement spans. A short window is a weak measurement. */
   windowSec: number;
+  /**
+   * How far the market moves against a passive fill, in bps, measured from the
+   * recent tape. Positive is a cost.
+   */
+  adverseBuyBps: number;
+  adverseSellBps: number;
+  /** Fills the adverse-selection figures were averaged over. */
+  adverseSamples: number;
 }
 
 /**

@@ -31,7 +31,7 @@ import { summarise } from "../sampler/analyse.ts";
 import { credentialsFromEnv, DEMO, MAINNET } from "../exec/binance-rest.ts";
 import { execute, ExecutionError } from "../exec/execute.ts";
 import { walletStatus, walletVersion } from "../exec/wallet.ts";
-import { BinanceError } from "../venues/binance.ts";
+import { BinanceError, fetchMid } from "../venues/binance.ts";
 import { OnchainError } from "../venues/onchain.ts";
 import { SnapshotError } from "../snapshot.ts";
 import type { Plan, Side, Snapshot } from "../types.ts";
@@ -107,15 +107,7 @@ async function snapshotFor(args: {
     throw new RouteError("Give exactly one of usd or baseQty.");
   }
   let baseQty = args.baseQty!;
-  if (args.usd !== undefined) {
-    const probe = await takeSnapshot({
-      symbol: args.symbol,
-      side: args.side,
-      baseQty: 1,
-      skipOnchain: true,
-    });
-    baseQty = args.usd / probe.mid;
-  }
+  if (args.usd !== undefined) baseQty = args.usd / (await fetchMid(args.symbol));
   const snapshot = await takeSnapshot({
     symbol: args.symbol,
     side: args.side,

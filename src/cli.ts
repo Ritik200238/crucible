@@ -11,7 +11,7 @@ import { takeSnapshot } from "./snapshot.ts";
 import { priceAllRoutes } from "./cost/model.ts";
 import { measuredImpactBps, route, RouteError } from "./decide/router.ts";
 import { ConfigError, DEFAULT_POLICY, isLiveEnabled, loadPolicy } from "./config.ts";
-import { BinanceError } from "./venues/binance.ts";
+import { BinanceError, fetchMid } from "./venues/binance.ts";
 import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
@@ -90,10 +90,7 @@ async function resolveSnapshot(args: Map<string, string>): Promise<{
   // A cheap Binance-only snapshot converts dollars into a base quantity, because
   // the on-chain quote has to be taken at the real size to mean anything.
   let baseQty = qty!;
-  if (usd !== undefined) {
-    const probe = await takeSnapshot({ symbol, side, baseQty: 1, skipOnchain: true });
-    baseQty = usd / probe.mid;
-  }
+  if (usd !== undefined) baseQty = usd / (await fetchMid(symbol));
 
   const snapshot = await takeSnapshot({ symbol, side, baseQty, includeWalletQuote: true });
   return { snapshot, side, baseQty, symbol };

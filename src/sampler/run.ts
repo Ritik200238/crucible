@@ -16,6 +16,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { takeSnapshot } from "../snapshot.ts";
+import { fetchMid } from "../venues/binance.ts";
 import { priceAllRoutes } from "../cost/model.ts";
 import type { Side } from "../types.ts";
 
@@ -73,10 +74,9 @@ export async function sampleOnce(
 ): Promise<Sample | SampleFailure> {
   const at = new Date().toISOString();
   try {
-    // A cheap Binance-only snapshot first, purely to turn dollars into a base
-    // quantity. The real snapshot then prices both venues at that exact size.
-    const probe = await takeSnapshot({ symbol, side, baseQty: 1, skipOnchain: true });
-    const baseQty = notionalUsd / probe.mid;
+    // One cheap price call turns dollars into a quantity; the real snapshot
+    // then prices both venues at exactly that size.
+    const baseQty = notionalUsd / (await fetchMid(symbol));
 
     const snapshot = await takeSnapshot({ symbol, side, baseQty });
     const routes = priceAllRoutes({ snapshot, side, baseQty });

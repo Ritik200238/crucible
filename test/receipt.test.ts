@@ -63,7 +63,7 @@ function snapshot(): Snapshot {
       minNotional: 5,
     },
     commission: { maker: 0.001, taker: 0.001, source: "account" },
-    flow: { hitsBidPerSec: 1.4, liftsAskPerSec: 1.6, windowSec: 20 },
+    flow: { hitsBidPerSec: 1.4, liftsAskPerSec: 1.6, windowSec: 20, adverseBuyBps: 0.6, adverseSellBps: 0.5, adverseSamples: 400 },
     onchain: null,
     hash: SNAPSHOT_HASH,
   };

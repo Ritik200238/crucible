@@ -181,6 +181,11 @@ export function costBinanceMaker(input: CostInput): CostEstimate {
   const spreadCreditBps = ((touch - s.mid) / s.mid) * BPS * direction;
   const p = fillProbability(s, side, baseQty);
 
+  // Measured from the tape, not assumed. This is the cost that decides whether
+  // posting is worth it at all: the half spread earned is a fraction of a basis
+  // point, and being picked off is routinely larger.
+  const adverseBps = side === "BUY" ? s.flow.adverseBuyBps : s.flow.adverseSellBps;
+
   const takerFallback = costBinanceTaker(input);
   if (takerFallback.unavailable) {
     return unavailable(
@@ -207,6 +212,17 @@ export function costBinanceMaker(input: CostInput): CostEstimate {
       name: "unfilled fallback",
       bps: takerFallback.totalBps * (1 - p),
       detail: `A ${((1 - p) * 100).toFixed(0)}% chance of missing and having to cross later at ${takerFallback.totalBps.toFixed(2)} bps.`,
+      estimated: true,
+    },
+    {
+      name: "adverse selection",
+      bps: adverseBps * p,
+      detail:
+        s.flow.adverseSamples > 0
+          ? `A resting order does not fill at random: it fills when someone chose to trade into it. ` +
+            `Over the last ${s.flow.adverseSamples} passive fills on this book the market then moved ` +
+            `${adverseBps >= 0 ? "against" : "in favour of"} that side by ${Math.abs(adverseBps).toFixed(2)} bps.`
+          : `Not enough recent fills to measure; treated as zero, which flatters this route.`,
       estimated: true,
     },
   ];

@@ -14,6 +14,7 @@
 
 import { createHash } from "node:crypto";
 import {
+  adverseSelection,
   fetchAggTrades,
   fetchBookTicker,
   fetchOrderBook,
@@ -86,6 +87,9 @@ export function hashSnapshot(s: Omit<Snapshot, "hash">): string {
       Number(s.flow.hitsBidPerSec.toFixed(6)),
       Number(s.flow.liftsAskPerSec.toFixed(6)),
       Number(s.flow.windowSec.toFixed(3)),
+      Number(s.flow.adverseBuyBps.toFixed(6)),
+      Number(s.flow.adverseSellBps.toFixed(6)),
+      s.flow.adverseSamples,
       s.onchain
         ? [
             s.onchain.amountIn,
@@ -114,7 +118,14 @@ export async function takeSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
     fetchSymbolFilters(symbol),
     fetchAggTrades(symbol, 500),
   ]);
-  const flow = tradeRates(trades);
+  const rates = tradeRates(trades);
+  const adverse = adverseSelection(trades);
+  const flow = {
+    ...rates,
+    adverseBuyBps: adverse.restingBuyBps,
+    adverseSellBps: adverse.restingSellBps,
+    adverseSamples: adverse.samples,
+  };
 
   const bestBid = ticker.bidPrice;
   const bestAsk = ticker.askPrice;
