@@ -459,12 +459,12 @@ priced from public endpoints.
 ```bash
 npm install
 
-npm run cli -- quote  --symbol BNBUSDT --usd 500      # price every route
-npm run cli -- route  --symbol BNBUSDT --usd 50000    # choose one, and gate it
-npm run cli -- route  --symbol BNBUSDT --usd 2000000  # watch the risk engine refuse
-npm run cli -- status                                  # what can actually execute
-npm run cli -- policy                                  # what is protecting you
-npm run cli -- samples                                 # the evidence so far
+node --experimental-strip-types src/cli.ts quote  --symbol BNBUSDT --usd 500      # price every route
+node --experimental-strip-types src/cli.ts route  --symbol BNBUSDT --usd 50000    # choose one, and gate it
+node --experimental-strip-types src/cli.ts route  --symbol BNBUSDT --usd 2000000  # watch the risk engine refuse
+node --experimental-strip-types src/cli.ts status                                  # what can actually execute
+node --experimental-strip-types src/cli.ts policy                                  # what is protecting you
+node --experimental-strip-types src/cli.ts samples                                 # the evidence so far
 
 npm test              # 474 tests
 npm run dashboard     # http://127.0.0.1:8787

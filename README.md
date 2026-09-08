@@ -121,17 +121,19 @@ and limits: [`docs/EXECUTION_EVIDENCE.md`](docs/EXECUTION_EVIDENCE.md).
 ## Try it
 
 Node 22 or later. No API key needed — both venues are priced from public
-endpoints.
+endpoints. The commands call node directly rather than `npm run cli --`,
+because Windows PowerShell drops the `--` and npm then eats every flag after
+it — `--usd 10` arrives as `10`.
 
 ```bash
 git clone <this repo> crucible && cd crucible && npm install
 
-npm run cli -- quote  --symbol BNBUSDT --usd 500        # price every route
-npm run cli -- route  --symbol BNBUSDT --usd 50000      # choose one, and gate it
-npm run cli -- route  --symbol BNBUSDT --usd 2000000    # watch the risk engine refuse
-npm run cli -- policy                                    # what is protecting you
-npm run cli -- samples                                   # the evidence so far
-npm run cli -- calibration                               # how wrong the model has been
+node --experimental-strip-types src/cli.ts quote  --symbol BNBUSDT --usd 500        # price every route
+node --experimental-strip-types src/cli.ts route  --symbol BNBUSDT --usd 50000      # choose one, and gate it
+node --experimental-strip-types src/cli.ts route  --symbol BNBUSDT --usd 2000000    # watch the risk engine refuse
+node --experimental-strip-types src/cli.ts policy                                    # what is protecting you
+node --experimental-strip-types src/cli.ts samples                                   # the evidence so far
+node --experimental-strip-types src/cli.ts calibration                               # how wrong the model has been
 ```
 
 Two scripts show the parts a terminal transcript hides:
