@@ -196,6 +196,13 @@ export function fillProbability(snapshot: Snapshot, side: Side, baseQty: number)
   // Capped short of certainty. A queue model cannot see order cancellations, a
   // price that walks away, or anyone jumping ahead by a tick, and each of those
   // only ever makes filling less likely than this says.
+  //
+  // This is a rough estimate, and knowingly so: scripts/backtest-maker.ts grades
+  // it against the real tape and finds it runs about fifteen points optimistic
+  // on deep queues, because 1-exp(-arrivals) is a single-arrival probability
+  // where a fill needs the cumulative volume to clear the whole queue. The maker
+  // cost carries a large uncertainty bar and an unfilled-fallback term for
+  // exactly that reason. See docs/MAKER_MODEL_EVIDENCE.md.
   return Math.min(0.95, p);
 }
 

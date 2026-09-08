@@ -22,6 +22,8 @@ What that has produced so far — every figure checkable in this repository:
 - **17 bugs found by attacking it**, three of which could have moved money to
   the wrong place — all seventeen re-run as attacks in CI on every push
 - **500 tests**, none of which need a network
+- The maker fill model **graded against the real tape** — and found ~15 bps
+  optimistic on deep queues, reported with the number rather than hidden
 - A signed, hash-chained ledger you can **verify in your own browser**
 
 **Try it now: [crucible-router.vercel.app](https://crucible-router.vercel.app).**
