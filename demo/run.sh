@@ -68,7 +68,7 @@ run policy
 beat "8. Have the estimates ever been checked against a real fill?"
 run calibration
 
-beat "9. Nine ways to get money out of this. Every one of them worked once."
+beat "9. Seventeen ways to get money out of this. Every one of them worked once."
 node --experimental-strip-types demo/attack.ts 2>&1 | grep -v "Warning" | grep -v "trace-warnings"
 
 beat "10. What the agent tells you is checked against the ledger too."

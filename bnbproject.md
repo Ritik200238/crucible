@@ -376,7 +376,7 @@ break it found seventeen, three of which could move real money to the wrong plac
 Every one is now covered by a test written from the attacker's side. A rule only
 ever fed the input it was designed to catch has not really been tested.
 
-Nine of them are also re-run as attacks rather than as assertions.
+Sixteen of them are also re-run as attacks rather than as assertions.
 `demo/attack.ts` drives the real modules, prints what stopped each attempt and
 where, and exits non-zero if any of them starts working again. The split-order
 case reproduces the original bug first — eighty slices through an evaluator with

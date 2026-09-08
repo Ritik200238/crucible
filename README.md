@@ -19,7 +19,7 @@ What that has produced so far — every figure checkable in this repository:
 - **Your real commission**, read through Binance's own MCP server, not a
   public fee schedule
 - **17 bugs found by attacking it**, three of which could have moved money to
-  the wrong place — nine of them re-run as attacks in CI on every push
+  the wrong place — sixteen of them re-run as attacks in CI on every push
 - **492 tests**, none of which need a network
 - A signed, hash-chained ledger you can **verify in your own browser**
 
@@ -175,7 +175,7 @@ node --experimental-strip-types demo/attack.ts          # eight attacks, run for
 node --experimental-strip-types demo/agent-session.ts   # the same product, driven over MCP
 ```
 
-`demo/attack.ts` exits non-zero if any attack succeeds, and CI runs it.
+`demo/attack.ts` exits non-zero if any of the seventeen attacks succeeds, and CI runs it.
 
 There is also a dashboard, if you would rather see a cost breakdown than read
 one:

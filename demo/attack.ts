@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Nine ways to get money out of this thing, run against the real code.
+ * Sixteen ways to get money out of this thing, run against the real code.
  *
  * Every defence here exists because the attack it stops used to work. None of
  * them came from reading the code and imagining what might go wrong: each one
@@ -29,7 +29,10 @@ import { assertUsableBook, walkBook } from "../src/snapshot.ts";
 import { priceAllRoutes, DEFAULT_MAX_DIVERGENCE_BPS } from "../src/cost/model.ts";
 import { route } from "../src/decide/router.ts";
 import { DEFAULT_POLICY } from "../src/config.ts";
-import { walletServiceFee } from "../src/venues/onchain.ts";
+import { walletServiceFee, quoteOnchain, TOKENS } from "../src/venues/onchain.ts";
+import { resolveQty, RouteError } from "../src/decide/router.ts";
+import { hashSnapshot } from "../src/snapshot.ts";
+import { toConfirmedFill } from "../src/exec/binance-rest.ts";
 import type {
   ConfirmedFill,
   EvaluationContext,
@@ -163,7 +166,7 @@ interface Attack {
   /** Why it used to work. */
   why: string;
   /** Returns how the attempt was stopped, or null if it succeeded. */
-  run: () => string | null;
+  run: () => (string | null) | Promise<string | null>;
 }
 
 const attacks: Attack[] = [
@@ -385,6 +388,126 @@ const attacks: Attack[] = [
     },
   },
   {
+    goal: "Charge a fee in an asset the receipt ignores by taking commission in the base coin",
+    why: "The receipt used to reduce a split commission to the single largest raw number. 0.9 USDT beat 0.002 BNB, so a fee worth more silently vanished from the realised cost.",
+    run: () => {
+      const order = {
+        symbol: "BNBUSDT", orderId: 1, clientOrderId: "c", transactTime: 0,
+        price: "0", origQty: "2", executedQty: "2", cummulativeQuoteQty: "1500",
+        status: "FILLED", type: "MARKET", side: "BUY",
+      } as unknown as Parameters<typeof toConfirmedFill>[0];
+      const trades = [
+        { id: 1, orderId: 1, price: "750", qty: "1", quoteQty: "750", commission: "0.001", commissionAsset: "BNB", isMaker: false, time: 0 },
+        { id: 2, orderId: 1, price: "750", qty: "1", quoteQty: "750", commission: "0.001", commissionAsset: "BNB", isMaker: false, time: 0 },
+      ] as unknown as Parameters<typeof toConfirmedFill>[1];
+      const filters = { symbol: "BNBUSDT", baseAsset: "BNB", quoteAsset: "USDT", baseAssetPrecision: 8, quoteAssetPrecision: 8, stepSize: 0.001, minQty: 0.001, maxQty: 9000, tickSize: 0.01, minNotional: 5 };
+      const fill = toConfirmedFill(order, trades, filters);
+      // The 0.002 BNB commission is worth 1.5 USDT, priced at the fill's own
+      // price rather than dropped for being a small raw number.
+      if (fill.totalFeeInQuote === null || fill.totalFeeInQuote < 1.4) return null;
+      return `the 0.002 BNB commission was priced at ${fill.totalFeeInQuote.toFixed(2)} USDT and carried, not discarded`;
+    },
+  },
+  {
+    goal: "Slip a fee past the comparison by charging it in an asset that cannot be priced from the fill",
+    why: "A commission taken in neither the base nor the quote asset has no price in this order. Guessing it at zero understates every realised cost that touches it.",
+    run: () => {
+      const order = {
+        symbol: "BNBUSDT", orderId: 1, clientOrderId: "c", transactTime: 0,
+        price: "0", origQty: "2", executedQty: "2", cummulativeQuoteQty: "1500",
+        status: "FILLED", type: "MARKET", side: "BUY",
+      } as unknown as Parameters<typeof toConfirmedFill>[0];
+      const trades = [
+        { id: 1, orderId: 1, price: "750", qty: "2", quoteQty: "1500", commission: "0.05", commissionAsset: "CAKE", isMaker: false, time: 0 },
+      ] as unknown as Parameters<typeof toConfirmedFill>[1];
+      const filters = { symbol: "BNBUSDT", baseAsset: "BNB", quoteAsset: "USDT", baseAssetPrecision: 8, quoteAssetPrecision: 8, stepSize: 0.001, minQty: 0.001, maxQty: 9000, tickSize: 0.01, minNotional: 5 };
+      const fill = toConfirmedFill(order, trades, filters);
+      // An unpriceable fee makes the realised total null, reported unavailable
+      // rather than counted as zero.
+      if (fill.totalFeeInQuote !== null) return null;
+      return `a CAKE commission cannot be priced from a BNB/USDT fill, so the realised fee is reported unavailable, not zero`;
+    },
+  },
+  {
+    goal: "Route to a pool by pricing its gas in the wrong coin",
+    why: "Gas is always paid in BNB, whatever is traded. One price field served both the pair and the gas; on BTC that priced eight microBNB of gas at the Bitcoin price and invented sixty basis points of cost.",
+    run: async () => {
+      let quote;
+      try {
+        quote = await quoteOnchain({
+          baseAsset: "BTC", quoteAsset: "USDT", side: "BUY", baseQty: 0.1,
+          midPriceUsd: 100_000, nativePriceUsd: 750,
+        });
+      } catch {
+        return "the pool did not answer, so this attack could not be run this time";
+      }
+      const gasBps = (quote.gasCostUsd / 10_000) * 10_000;
+      // Priced at BTC instead of BNB the figure would be ~133x larger. A sane
+      // number is proof the pair price and the native price are separate fields.
+      if (gasBps > 5) return null;
+      return `gas on a $10,000 BTC order priced at $${quote.gasCostUsd.toFixed(4)} in BNB, ${gasBps.toFixed(3)} bps, not the 133x figure a single price field produced`;
+    },
+  },
+  {
+    goal: "Hide the 50 bps wallet fee on BTC by looking it up under the exchange name",
+    why: "Bitcoin trades on this chain as BTCB. The fee was looked up by the exchange name, BTC, which was in neither the free set nor the charged set, so the lookup missed on exactly the pair where the fee decides the venue.",
+    run: () => {
+      const fee = walletServiceFee("BTCB", "USDT");
+      if (fee.rate <= 0) return null;
+      return `${(fee.rate * 10_000).toFixed(0)} bps charged on BTCB/USDT and marked ${fee.verified ? "confirmed" : "assumed"}, rather than missing the lookup and charging nothing`;
+    },
+  },
+  {
+    goal: "Forge a plan that prices differently but hashes the same, by changing only the assets",
+    why: "The snapshot hash is the plan's fingerprint. If it left out the asset names, two snapshots that swap one pair for another with a 50 bps wallet fee would hash identically and one plan could stand in for the other.",
+    run: () => {
+      const base = snapshotWithPool(POISON_MID);
+      const swapped: Snapshot = { ...base, filters: { ...base.filters, baseAsset: "DOGE", quoteAsset: "USDT" } };
+      const h1 = hashSnapshot(base);
+      const h2 = hashSnapshot(swapped);
+      if (h1 === h2) return null;
+      return `changing only the base asset changed the hash (${h1.slice(0, 10)} to ${h2.slice(0, 10)}), so a differently-priced snapshot cannot wear another's fingerprint`;
+    },
+  },
+  {
+    goal: "Route a contradictory order by giving it both a base size and a quote size",
+    why: "The resolver promised exactly one size and silently preferred the base. A caller passing both would trade one figure while the receipt recorded the other.",
+    run: () => {
+      const snap = snapshotWithPool(POISON_MID);
+      try {
+        resolveQty({ symbol: "BNBUSDT", side: "BUY", baseQty: 10, quoteQty: 999_999 }, snap);
+        return null;
+      } catch (err) {
+        if (!(err instanceof RouteError)) return null;
+        return `refused: ${err.message.split(".")[0]}`;
+      }
+    },
+  },
+  {
+    goal: "Break the exchange with an odd network delay so the signed timestamp is fractional",
+    why: "Half a round trip is not a whole millisecond when the round trip is odd, so the clock offset came out fractional and the signed timestamp serialised as ...123.5. Binance parses that field as digits only and rejected roughly half of all orders.",
+    run: () => {
+      const exchangeAccepts = /^[0-9]{1,20}$/;
+      const offsetFractional = 1_757_337_600_500 - (1_757_337_600_000 + 1 / 2);
+      const bad = String(1_757_337_600_000 + offsetFractional);
+      const good = String(Math.round(1_757_337_600_000 + offsetFractional));
+      if (exchangeAccepts.test(bad)) return "the fractional case did not reproduce";
+      if (!exchangeAccepts.test(good)) return null;
+      return `the rounded timestamp ${good} is accepted where the fractional ${bad} was refused`;
+    },
+  },
+  {
+    goal: "Report a hosted ledger intact when it was never found, by pointing verification elsewhere",
+    why: "Verification named the default directory instead of resolving the configured one, so on a hosted instance it checked a folder that did not exist and reported '0 records, chain verified, signature valid' for a ledger it had never read.",
+    run: () => {
+      const dir = mkdtempSync(join(tmpdir(), "crucible-attack-"));
+      temps.push(dir);
+      const r = verifyLedger({ dir });
+      if (r.present) return "the empty directory was reported as present, so this attack proves nothing";
+      return `verification reports the ledger absent (present=false) rather than "intact, 0 records" for a file it never found`;
+    },
+  },
+  {
     goal: "Walk a mis-sorted book so the order prices against levels in the wrong sequence",
     why: "Out-of-order levels still walk. The result overstates or understates every cost depending on which way the sort broke.",
     run: () => {
@@ -412,7 +535,7 @@ console.log(`  ${dim("Each of these worked once. Three of them moved money to th
 
 let broken = 0;
 for (const [i, attack] of attacks.entries()) {
-  const outcome = attack.run();
+  const outcome = await attack.run();
   console.log();
   console.log(`  ${bold(`${i + 1}. ${attack.goal}`)}`);
   console.log(`     ${dim(attack.why)}`);
