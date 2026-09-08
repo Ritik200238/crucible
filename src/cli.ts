@@ -2,9 +2,14 @@
 /**
  * Crucible CLI.
  *
- * The same calls the MCP server makes, in a form a person can read. There is no
- * separate presentation path: what is printed here is what an agent is told, so
- * a demo cannot show something the product does not actually do.
+ * The same calls the MCP server makes, in a form a person can read: quote,
+ * route, execute, policy, evidence, ledger verification and reachability.
+ * There is no separate presentation path — what is printed here runs the same
+ * code an agent drives, so a demo cannot show something the product does not do.
+ *
+ * Execution is reached through `route --execute` rather than a command of its
+ * own. Plans are never written to disk, so a standalone `execute <id>` could
+ * only ever name a plan that had already gone.
  */
 
 import { takeSnapshot } from "./snapshot.ts";
@@ -16,14 +21,24 @@ import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
 import { verifyLedger } from "./ledger/verify.ts";
+import { execute, ExecutionError } from "./exec/execute.ts";
+import { credentialsFromEnv } from "./exec/binance-rest.ts";
 import { Ledger } from "./ledger/chain.ts";
 import { deriveState, emptyState } from "./risk/state.ts";
-import { credentialsFromEnv, DEMO, MAINNET } from "./exec/binance-rest.ts";
+import { DEMO, MAINNET } from "./exec/binance-rest.ts";
 import { walletStatus, walletVersion } from "./exec/wallet.ts";
 import { summarise } from "./sampler/analyse.ts";
 import { ALL_RULES } from "./risk/rules.ts";
 import { evaluate } from "./risk/engine.ts";
-import type { CostEstimate, Plan, Policy, RollingState, Side, Snapshot } from "./types.ts";
+import type {
+  CostEstimate,
+  Decision,
+  Plan,
+  Policy,
+  RollingState,
+  Side,
+  Snapshot,
+} from "./types.ts";
 
 const colour = process.env.NO_COLOR === undefined && process.stdout.isTTY === true;
 const c = {
@@ -212,6 +227,83 @@ function printPlan(plan: Plan, snapshot: Snapshot, side: Side): void {
   console.log();
 }
 
+/**
+ * Carry a plan through to execution, in the same process that made it.
+ *
+ * Plans are deliberately never written to disk, so a separate `execute` command
+ * taking an id could not work: by the time it ran, the plan it named would be
+ * gone. Routing and executing in one invocation is the only shape that keeps
+ * the decision and the order tied together without persisting an authorisation.
+ */
+async function runExecution(
+  plan: Plan,
+  snapshot: Snapshot,
+  policy: Policy,
+  verdict: Decision["verdict"],
+): Promise<number> {
+  console.log();
+  if (verdict === "BLOCK") {
+    console.log(`  ${c.red("✗")} The risk engine refused this order. Nothing will be sent.`);
+    console.log();
+    return 1;
+  }
+  if (verdict === "CONFIRM") {
+    console.log(
+      `  ${c.yellow("!")} This order needs a human decision first, so --execute will not send it.`,
+    );
+    console.log(c.dim("    Raise confirmAboveNotionalUsd, or trade smaller."));
+    console.log();
+    return 1;
+  }
+
+  const baseUrl = process.env.CRUCIBLE_BINANCE_BASE ?? DEMO;
+  let binance: { baseUrl: string; credentials: ReturnType<typeof credentialsFromEnv> } | undefined;
+  try {
+    binance = { baseUrl, credentials: credentialsFromEnv() };
+  } catch {
+    binance = undefined;
+  }
+
+  if (baseUrl === MAINNET) {
+    console.log(`  ${c.red("● LIVE EXCHANGE")} ${c.dim("— this spends real money.")}`);
+  }
+
+  try {
+    const receipt = await execute({ plan, snapshot, policy, ...(binance ? { binance } : {}) });
+
+    console.log(`  ${c.bold("RECEIPT")} ${receipt.planId}   ${c.dim(receipt.fingerprint)}`);
+    console.log(
+      `  predicted ${bps(receipt.predicted.totalBps)}` +
+        (receipt.realisedBps === null
+          ? `   ${c.yellow("realised unavailable")}`
+          : `   realised ${bps(receipt.realisedBps)} ` +
+            c.dim(`(price ${bps(receipt.realisedGrossBps)} + fee ${bps(receipt.realisedFeeBps ?? 0)})`) +
+            `   error ${bps(receipt.errorBps ?? 0)}`),
+    );
+    if (receipt.errorUnavailable) console.log(c.yellow(`  ${receipt.errorUnavailable}`));
+    if (receipt.alternative && receipt.savingUsd !== null) {
+      console.log(
+        `  ${c.green("saved")} ${money(receipt.savingUsd)} ` +
+          c.dim(`against ${venueName(receipt.alternative.venue)} at ${bps(receipt.alternative.totalBps)}`),
+      );
+    }
+    for (const f of receipt.fills) {
+      const fees = f.fees.length === 0 ? "no commission" : f.fees.map((x) => `${x.amount} ${x.asset}`).join(" + ");
+      console.log(
+        `  ${f.status === "FILLED" ? c.green("●") : c.yellow("○")} ${f.status} ` +
+          `${f.filledBaseQty} at ${f.avgPrice}  ${c.dim(fees)}`,
+      );
+      console.log(c.dim(`      ${f.reference}  ${f.confirmedBy}`));
+    }
+    console.log();
+    return 0;
+  } catch (err) {
+    console.log(`  ${c.red("✗")} ${(err as Error).message}`);
+    console.log();
+    return 3;
+  }
+}
+
 async function cmdRoute(args: Map<string, string>): Promise<number> {
   const { policy } = loadPolicy(args.get("config"));
   const { snapshot, side, baseQty, symbol } = await resolveSnapshot(args);
@@ -264,6 +356,10 @@ async function cmdRoute(args: Map<string, string>): Promise<number> {
     console.log(`   ${mark} ${name} ${msg}`);
   }
   console.log();
+
+  if (args.get("execute") === "true") {
+    return runExecution(plan, snapshot, policy, decision.verdict);
+  }
 
   const badge =
     decision.verdict === "BLOCK"
@@ -446,6 +542,7 @@ const HELP = `
     --qty      Size in the base asset              ${c.dim("(give one of --usd or --qty)")}
     --equity   Simulated account equity for risk   ${c.dim("(default 100000)")}
     --config   Policy file                         ${c.dim("(default crucible.config.json)")}
+    --execute  Send the order if it clears, and print the receipt
     --json     Machine-readable output
 
   ${c.bold("EXAMPLES")}
@@ -480,6 +577,7 @@ async function main(): Promise<number> {
     }
   } catch (err) {
     if (
+      err instanceof ExecutionError ||
       err instanceof RouteError ||
       err instanceof ConfigError ||
       err instanceof SnapshotError ||

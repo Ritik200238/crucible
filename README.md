@@ -64,16 +64,16 @@ Measured, not asserted. Regenerate any of it with `npm run evidence`.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 1 | 100% | 1.25 bps | 10.07 bps | 8.81 bps |
-| BNBUSDT | $1,000 | 1 | 100% | -0.29 bps | 10.07 bps | 10.35 bps |
-| BNBUSDT | $10,000 | 1 | 100% | 1.28 bps | 11.03 bps | 9.74 bps |
-| BNBUSDT | $100,000 | 1 | 100% | 11.75 bps | 12.17 bps | 0.41 bps |
-| ETHUSDT | $100 | 1 | 100% | 3.08 bps | 10.02 bps | 6.94 bps |
-| ETHUSDT | $1,000 | 1 | 100% | 1.69 bps | 10.02 bps | 8.33 bps |
-| ETHUSDT | $10,000 | 1 | 100% | 7.21 bps | 9.69 bps | 2.47 bps |
-| ETHUSDT | $100,000 | 1 | 0% | 69.11 bps | 9.64 bps | -59.48 bps |
+| BNBUSDT | $100 | 5 | 100% | 1.25 bps | 10.07 bps | 8.81 bps |
+| BNBUSDT | $1,000 | 5 | 100% | 1.14 bps | 10.07 bps | 8.92 bps |
+| BNBUSDT | $10,000 | 5 | 100% | 2.48 bps | 10.17 bps | 7.67 bps |
+| BNBUSDT | $100,000 | 5 | 80% | 11.75 bps | 12.17 bps | 0.43 bps |
+| ETHUSDT | $100 | 5 | 100% | 3.11 bps | 10.02 bps | 6.91 bps |
+| ETHUSDT | $1,000 | 5 | 100% | 3.27 bps | 10.02 bps | 6.75 bps |
+| ETHUSDT | $10,000 | 5 | 40% | 13.34 bps | 10.02 bps | -3.32 bps |
+| ETHUSDT | $100,000 | 5 | 0% | 74.22 bps | 10.03 bps | -63.61 bps |
 
-Measured across 8 samples spanning 0.0 hours. On-chain was cheaper in 88% of them.
+Measured across 40 samples spanning 0.7 hours. On-chain was cheaper in 78% of them.
 <!-- EVIDENCE:END -->
 
 **The cheaper venue changes with size, and the crossover is different for each

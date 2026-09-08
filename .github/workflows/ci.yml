@@ -1,0 +1,41 @@
+name: ci
+
+# Every push and every pull request. A suite that only runs when someone
+# remembers to run it is a suite nobody trusts.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Both platforms on purpose. The wallet CLI is located differently on
+    # Windows, where an npm global binary is a shim that cannot be spawned
+    # directly, and that difference has already broken this project once.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # The suite reaches no venue: every test builds its fixtures inline or
+      # injects a fake fetch. It therefore runs the same with or without a
+      # network, which is what makes a green build mean something here.
+      - name: Test
+        run: node --experimental-strip-types --test test/*.test.ts
+
+      - name: Check the documented numbers still match the data
+        run: node --experimental-strip-types scripts/check-numbers.ts

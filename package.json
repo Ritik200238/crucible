@@ -16,7 +16,9 @@
     "sample": "node --experimental-strip-types src/cli.ts sample",
     "evidence": "node --experimental-strip-types src/sampler/report.ts",
     "test": "node --experimental-strip-types --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:numbers": "node --experimental-strip-types scripts/check-numbers.ts",
+    "verify": "npm run typecheck && npm test && npm run check:numbers"
   },
   "engines": {
     "node": ">=22"
