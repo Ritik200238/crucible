@@ -39,3 +39,9 @@ jobs:
 
       - name: Check the documented numbers still match the data
         run: node --experimental-strip-types scripts/check-numbers.ts
+
+      # The attacks are run as well as tested. The suite proves each defence
+      # in isolation; this proves they still hold when wired together, and
+      # exits non-zero if any attack starts working again.
+      - name: Re-run the attacks
+        run: node --experimental-strip-types demo/attack.ts

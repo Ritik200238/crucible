@@ -65,6 +65,15 @@ run samples
 beat "7. Which rules are in force."
 run policy
 
+beat "8. Have the estimates ever been checked against a real fill?"
+run calibration
+
+beat "9. Eight ways to get money out of this. Every one of them worked once."
+node --experimental-strip-types demo/attack.ts 2>&1 | grep -v "Warning" | grep -v "trace-warnings"
+
+beat "10. And the caller this was built for is not a shell."
+node --experimental-strip-types demo/agent-session.ts 2>&1 | grep -v "Warning" | grep -v "trace-warnings"
+
 echo
 echo "  Every price above was fetched live when the command ran."
 echo "  Nothing was transmitted: execution is off unless two switches agree."
