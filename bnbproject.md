@@ -1,0 +1,417 @@
+# Crucible
+
+**Smart execution for Binance agents.** Your agent decides *what* to trade.
+Crucible decides *where* and *how* — and proves what it cost.
+
+This document is written for someone who knows nothing about the project. It
+covers what it is, what it does, how it works, what is finished, and what is
+not. The last part is included on purpose: a tool that measures small numbers
+has no business being vague about its own limits.
+
+---
+
+## 1. The problem, in one paragraph
+
+When an AI agent buys crypto, it places a market order on Binance and pays the
+commission, the spread, and the cost of moving the book. Those three are
+routinely larger than the edge the strategy was chasing. Almost nothing measures
+them.
+
+Binance Agent OS already gives an agent two ways to buy the same asset — the
+exchange, and on-chain through the Agentic Wallet. **They do not cost the same,
+and which one is cheaper changes with the size of the order.** Nothing chooses
+between them per order.
+
+## 2. What Crucible is
+
+A router that sits between the agent and the money.
+
+The agent says *buy $1,000 of BNB*. Crucible prices that exact order on both
+venues at the same instant, picks whichever fills it cheapest, checks it against
+the operator's risk rules, executes it, confirms the fill by reading it back
+from the venue, and issues a receipt comparing what it predicted to what
+actually happened.
+
+It does not decide whether a trade is a good idea. It makes the trade you have
+already decided on cost less, and shows its working.
+
+---
+
+## 3. What we found
+
+This is the finding the product is built around. Every figure is computed from
+recorded samples by a script, not typed by hand.
+
+Cost is quoted in **basis points** — one basis point is 0.01%, so 10 bps on a
+$1,000 order is $1.00.
+
+| Pair | Order size | On-chain cheaper | Median on-chain | Median Binance |
+|---|---|---|---|---|
+| BNBUSDT | $100 | 100% | ~2 bps | ~10 bps |
+| BNBUSDT | $1,000 | 100% | ~2 bps | ~10 bps |
+| BNBUSDT | $10,000 | 100% | ~3 bps | ~10 bps |
+| ETHUSDT | $1,000 | 100% | ~5 bps | ~10 bps |
+| ETHUSDT | $10,000 | 0% | ~16 bps | ~10 bps |
+
+**The cheaper venue changes with size, and the crossover is different for each
+pair.** BNB/USDT stays cheaper on-chain far longer than ETH/USDT, because its
+pool is deeper.
+
+That single fact is the entire argument for routing per order rather than
+picking a venue once and living with it.
+
+### Why the gap exists
+
+An exchange trade at the standard fee tier pays **0.1%** — ten basis points —
+before anything else happens. The deepest BNB/USDT pool charges **0.01%**, one
+basis point. The wallet adds nothing on a swap between two major assets, and gas
+on BNB Smart Chain is a fraction of a basis point on any order worth routing.
+
+The advantage is real but conditional. It shrinks on a better fee tier, and it
+reverses on a large enough order because pool impact grows faster than book
+impact.
+
+### A second finding, which changed the product
+
+Posting a passive order at the touch looked cheaper than crossing the spread,
+until we measured **adverse selection** — the fact that a resting order does not
+fill at random. It fills when somebody chose to trade into it, and that somebody
+is more often right than wrong over the next few seconds.
+
+Measured from the trade tape, over roughly 450 fills per symbol: **0.4 to 1.7
+basis points**. The half spread a passive order earns is **0.065**.
+
+So posting loses money at the standard fee tier, where maker and taker rates are
+identical. The model said the opposite until this was measured and charged.
+
+---
+
+## 4. How it works
+
+### The pipeline
+
+```
+intent  →  snapshot  →  costs  →  plan  →  risk  →  execution  →  receipt
+```
+
+Every stage after the snapshot is a **pure function** of it. Nothing downstream
+reads a clock or a network. Give it the same snapshot and policy and it returns
+the same plan, down to the fingerprint — which is what makes a decision
+checkable by someone who was not there when it was made.
+
+### Stage 1 — the snapshot
+
+One object, captured at one instant, holding everything a decision is allowed to
+depend on:
+
+- Binance order book, best bid and ask, symbol trading rules, real commission
+  rates
+- The pool's price on **every** fee tier, plus live gas
+- Measured trade flow and adverse selection from the tape
+- Optionally the wallet's own executable quote, as a second opinion
+
+Both venues are fetched **concurrently**. Sequential calls would compare a
+Binance price from one moment against a pool price a second later, and at these
+margins that gap is larger than the effect being measured.
+
+The whole thing is hashed. Two snapshots with the same hash produce the same
+plan.
+
+**The book is validated before it enters the pipeline.** A crossed market, an
+empty side, a price that is not a number, or levels out of price order are all
+refused — each of them still walks and still returns a plausible-looking cost,
+which is worse than failing.
+
+### Stage 2 — the cost model
+
+Three routes priced on one comparable axis:
+
+**Binance, crossing the spread** — commission, half the spread to reach the
+touch, and the impact of walking however many levels the size needs. The last
+two come from the live book, not a constant.
+
+**Binance, posting at the touch** — the fee and the spread earned, both weighted
+by the chance of actually filling, plus the cost of being picked off, plus the
+cost of missing and having to cross later.
+
+**On-chain** — the pool fee, the price impact, gas, and the wallet's service
+fee. Every fee tier is quoted and the best-paying one wins, because which tier
+is cheapest depends on size: the tightest-fee pool has the least room.
+
+Two details that took work to get right:
+
+- **Impact and venue divergence are separated** using a near-zero-size reference
+  quote from the same pool. Measuring impact against the Binance mid would
+  conflate how far the order pushes the pool with how far the pool had already
+  drifted, and only the first is a cost of trading.
+- **Fill probability is measured, not assumed.** A resting order clears once
+  enough volume has crossed to work through the queue ahead of it plus itself,
+  so the model reads real trade flow. A larger order is *less* likely to fill —
+  the opposite of what a naive queue-ratio model says.
+
+Risks that carry **no expected cost** are named rather than priced. An on-chain
+swap settles over several blocks and the pool moves in that window; it can also
+fail on slippage and still cost gas. Average drift is zero, so there is no
+honest number to charge — but the exchange route does not carry either risk, and
+a cheaper number that hides one is not cheaper.
+
+### Stage 3 — the plan
+
+The cheapest route wins, with one deliberate exception: **a route whose cost is
+modelled does not beat a measured one unless it wins by more than the modelling
+could plausibly be wrong by.**
+
+The plan carries a fingerprint over the intent, the snapshot and the policy, and
+expires after sixty seconds. Market state at these margins goes stale in
+seconds, so a plan is re-priced rather than replayed.
+
+When a single order would move the book past the operator's impact limit, the
+plan becomes several children spaced over time, each re-priced and re-gated
+separately.
+
+### Stage 4 — the risk engine
+
+**Seventeen deterministic rules.** Eleven gate any order; six are specific to
+execution.
+
+| | |
+|---|---|
+| Size | per-order cap, daily volume cap, position concentration |
+| Behaviour | daily loss circuit breaker, post-loss cooldown, hourly rate brake |
+| Scope | symbol allowlist, market allowlist, venue allowlist, no-trade windows |
+| Escalation | large orders require a human |
+| Execution | book impact, slippage, resting depth, snapshot age |
+| Believability | disagreement between the two on-chain price sources, and a bound on how far a venue may sit from the exchange before it is believed at all |
+
+**One BLOCK blocks the order**, regardless of how many rules passed. Safety rules
+that can be outvoted are not safety rules.
+
+**Risk-reducing orders keep their exemptions.** A cap that blocks the order
+closing a losing position traps you in exactly the trade you wanted out of.
+
+**The cumulative rules count what actually executed**, rebuilt from the ledger
+rather than a counter file. That is what stops an order too large for the
+per-order cap simply arriving eighty times instead of once.
+
+### Stage 5 — execution
+
+**On the exchange:** the order is validated by Binance's own `order/test` before
+anything is sent. Then placed, then **read back**. The fill, the price, the fee
+and the maker flag come from the trade records — never from the response that
+placed the order.
+
+**On-chain:** through the Agentic Wallet CLI, which holds its own key and
+enforces its own daily limit. This process never sees a private key. Binance's
+documentation is explicit that a swap returning an order id has only been
+*submitted*, so it is polled to a terminal state, and a failed swap is reported
+as failed rather than as a success with a missing hash.
+
+Two independent switches are required before anything is transmitted: the policy
+must say `live`, **and** an environment variable must be set in the shell by a
+person. A config file an agent could edit is not on its own enough to move real
+money.
+
+### Stage 6 — the receipt
+
+```
+predicted 10.13 bps · realised 10.40 bps (price 0.40 + commission 10.00) · error 0.27 bps
+saved $0.93 against the other venue
+FILLED 2 BNB at 752.05, fee 0.002 BNB — order 12345, confirmed by re-reading the order
+```
+
+**The error line is the product grading its own homework.** Realised includes
+commission, because the prediction does — a price-only figure would be wrong by
+roughly one fee on every fill. When a fee is charged in an asset the fill cannot
+price, the comparison is reported as **unavailable with a reason** rather than
+folded in as zero.
+
+### The ledger
+
+Every decision — allowed, refused, failed — is appended to a hash-chained,
+Ed25519-signed log. Editing any past line breaks the chain at exactly that line.
+Deleting trailing records leaves a consistent chain that fails the signed count.
+
+A ledger that only holds successes is a marketing document.
+
+---
+
+## 5. What has been built
+
+| | |
+|---|---|
+| Source | 23 files, ~8,000 lines of TypeScript |
+| Tests | 11 files, ~6,200 lines, **339 tests, all passing** |
+| Commits | 45 |
+| CI | GitHub Actions, green on **Linux and Windows** |
+
+### Surfaces
+
+**MCP server** — seven tools an AI agent drives: `quote`, `route`, `execute`,
+`policy`, `evidence`, `verify_ledger`, `status`.
+
+The split is deliberate. `quote` prices without deciding. `route` decides and
+returns a fingerprinted plan. `execute` takes **only a plan id** — never order
+details. An agent therefore cannot execute an order the risk engine has not
+already seen, and cannot alter it between the decision and the fill. Any change
+produces a different plan that has to clear the gates again.
+
+**CLI** — the same calls in a form a person can read: `quote`, `route`,
+`route --execute`, `status`, `policy`, `verify`, `sample`, `samples`. There is
+no separate presentation path, so a demo cannot show something the product does
+not do.
+
+**Dashboard** — one page, no build step, and **no external requests of any
+kind**, enforced by a Content-Security-Policy header rather than asserted in a
+comment. Live two-venue quote, the evidence summary, the active policy, and
+ledger verification.
+
+**Evidence sampler** — prices both venues every ten minutes and records what
+each would have cost. Public endpoints only, nothing executed, no credential
+needed. Failures are written down rather than dropped, because discarding the
+samples where one venue was unreachable would bias the result toward whichever
+happened to be answering.
+
+**Evidence document** — regenerated from the samples by a script. Nothing in it
+is typed by hand, and a build check fails if the README or the document drift
+from the data behind them.
+
+**Skills Hub skill** — packaged for submission to Binance's open skills
+repository.
+
+---
+
+## 6. Twelve bugs found by attacking it
+
+These are listed because they are the most honest thing in this document. **Not
+one of them came from reading the code.** Reviewing found nothing. Trying to
+break it found twelve, three of which could move real money to the wrong place.
+
+| # | Bug | Why it mattered |
+|---|---|---|
+| 1 | A venue price 99% below the exchange priced at −9,900 bps and the router sent the order there | A stale feed, a wrong token, or a moved pool all look exactly like this |
+| 2 | Four cumulative rules read counters hardcoded to zero and could never fire | An order too large for the cap could arrive eighty times instead of once |
+| 3 | The realised cost omitted commission entirely | The product's own honesty metric was wrong by a full fee on every fill |
+| 4 | Fill probability was inverted | It recommended posting a large order *because* it was large |
+| 5 | Adverse selection was not modelled at all | It recommended posting when posting loses money |
+| 6 | The two-source price check compared against a quote that was never fetched | A gate that read as protection while protecting nothing |
+| 7 | A negative book level corrupted the walk | One bad level produced an average price available at no venue |
+| 8 | A crossed, empty, unsorted or NaN book still returned a cost | A number with no market behind it, treated downstream as real |
+| 9 | A plan could be replayed inside its own minute | The docs claimed single use; only expiry was enforced |
+| 10 | Fees split across assets picked the largest raw number | 0.9 USDT beat 0.002 BNB, which is worth more. Money vanished from receipts |
+| 11 | The snapshot hash omitted fields the decision reads | The stated reproducibility guarantee was not true |
+| 12 | The size resolver promised "exactly one" and silently preferred one | A contradictory intent was routed rather than refused |
+
+Every one is now covered by a test written from the attacker's side. A rule only
+ever fed the input it was designed to catch has not really been tested.
+
+---
+
+## 7. What is **not** done
+
+Stated plainly.
+
+### No order has ever been executed against a real venue
+
+This is the single largest gap. The execution code is complete and follows
+Binance's documentation exactly. The whole pipeline is proven end to end against
+a **simulated** venue, with the call sequence asserted exactly:
+
+```
+GET  /api/v3/time
+POST /api/v3/order/test     ← validation precedes transmission
+POST /api/v3/order
+GET  /api/v3/order          ← the fill comes from here, never the POST
+GET  /api/v3/myTrades
+```
+
+The pipeline is proven. **The venue is not.** That needs exchange API keys and a
+signed-in wallet session, and until it happens this sentence stays here.
+
+### No hosted endpoint
+
+Running it means cloning the repository. A hosted MCP endpoint would let anyone
+connect in one command, and that requires a server the wallet session can live
+on.
+
+### The evidence is young
+
+The sampler restarts whenever the cost model changes, because averaging figures
+from two different models would produce a number describing neither. The current
+sample is real and regenerable but covers hours, not market cycles.
+
+### Other limits
+
+- **Two pairs.** BNB and ETH against USDT, both with deep pools. A thinner pair
+  would look different.
+- **Fees default to the public standard schedule** when no account credential is
+  present, and every report says so. A real account usually pays less, which
+  *narrows* the gap this product reports.
+- **Maker cost is an estimate.** It is weighted by a fill probability derived
+  from measured flow, and the receipt's error is the check on whether that model
+  is any good.
+- **One operator, one policy.** Not multi-tenant.
+- **Position tracking is average-cost and derived from fills.** It is not a
+  full accounting system.
+
+---
+
+## 8. Running it
+
+Node 22 or later. **Quoting needs no credentials at all** — both venues are
+priced from public endpoints.
+
+```bash
+npm install
+
+npm run cli -- quote  --symbol BNBUSDT --usd 500      # price every route
+npm run cli -- route  --symbol BNBUSDT --usd 50000    # choose one, and gate it
+npm run cli -- route  --symbol BNBUSDT --usd 2000000  # watch the risk engine refuse
+npm run cli -- status                                  # what can actually execute
+npm run cli -- policy                                  # what is protecting you
+npm run cli -- samples                                 # the evidence so far
+
+npm test              # 339 tests
+npm run dashboard     # http://127.0.0.1:8787
+bash demo/run.sh      # the whole story, against live prices
+```
+
+Connecting it to an agent:
+
+```bash
+claude mcp add crucible -- node --experimental-strip-types /absolute/path/to/src/mcp/server.ts
+```
+
+Executing needs exchange API keys and a wallet session. `SETUP.md` covers both,
+and the safe order to do them in.
+
+---
+
+## 9. The principles it was built on
+
+Each of these was written down before the code and enforced afterwards.
+
+**Nothing is a demo.** Every price is fetched live. There is no mock mode, no
+fixture on a path a user can reach, and no number in any document that was typed
+rather than computed.
+
+**Never guess.** Every endpoint, parameter, fee, limit and contract address was
+read from Binance's own documentation or probed directly. Where something could
+not be verified, it says so.
+
+**Refuse rather than answer wrongly.** A pair that cannot be priced in USD is
+declined rather than mispriced. A book that cannot be trusted is refused rather
+than walked. A fee that cannot be converted makes a comparison unavailable
+rather than silently zero.
+
+**State the limits where the claim is made,** not in a footnote.
+
+**A number with no sample count behind it is not evidence.** Every rate in every
+report carries its `n`.
+
+---
+
+## 10. In one sentence
+
+Crucible makes the trade you already decided on cost less, proves how much less,
+and refuses the ones that should not happen — and it is honest about the one
+thing it has not done yet.
