@@ -30,8 +30,8 @@ import { verifyLedger } from "../ledger/verify.ts";
 import { calibration } from "../exec/calibration.ts";
 import { isSample, readSamples } from "../sampler/run.ts";
 import { summarise } from "../sampler/analyse.ts";
-import { credentialsFromEnv, DEMO, MAINNET } from "../exec/binance-rest.ts";
-import { execute, ExecutionError } from "../exec/execute.ts";
+import { credentialsFromEnv, DEMO, MAINNET, type Credentials } from "../exec/binance-rest.ts";
+import { execute, ExecutionError, reconcile } from "../exec/execute.ts";
 import { walletStatus, walletVersion } from "../exec/wallet.ts";
 import { BinanceError, fetchMid } from "../venues/binance.ts";
 import { OnchainError } from "../venues/onchain.ts";
@@ -448,6 +448,55 @@ server.registerTool(
         ? `Ledger intact: ${r.records} records, chain verified, signature ${r.signatureValid ? "valid" : "not checked"}.`
         : `Ledger FAILED verification at record ${r.brokenAt}: ${r.reason}`,
     );
+  },
+);
+
+server.registerTool(
+  "reconcile",
+  {
+    title: "Resolve an order whose outcome was lost",
+    description:
+      "When execute reports that an order was sent but its outcome could not be established, call " +
+      "this with the plan id. It asks the venue again and records the answer: filled, partly filled, " +
+      "or never filled. Until then the order's notional is held against the caps. Never retry an " +
+      "unconfirmed order without reconciling it first — the original may have filled.",
+    inputSchema: {
+      planId: z.string().describe("The plan id named in the unconfirmed error."),
+    },
+  },
+  async (args) => {
+    const { planId } = args as { planId: string };
+    let binance: { baseUrl: string; credentials: Credentials } | undefined;
+    try {
+      binance = { baseUrl: process.env.CRUCIBLE_BINANCE_BASE ?? DEMO, credentials: credentialsFromEnv() };
+    } catch {
+      binance = undefined;
+    }
+    try {
+      const r = await reconcile({ planId, ledger: new Ledger(), ...(binance ? { binance } : {}) });
+      const lines = [`Plan ${r.planId}: ${r.outcome.replace("_", " ")}.`];
+      for (const f of r.fills) {
+        lines.push(
+          `  ${f.venue} ${f.status} ${f.filledBaseQty.toFixed(6)} @ ${f.avgPrice.toFixed(4)} ref ${f.reference}`,
+        );
+      }
+      if (r.realisedBps !== null) {
+        lines.push(
+          `  realised ${r.realisedBps.toFixed(2)} bps` +
+            (r.errorBps !== null
+              ? `, ${r.errorBps >= 0 ? "+" : ""}${r.errorBps.toFixed(2)} bps against the prediction`
+              : ""),
+        );
+      }
+      if (r.outcome === "still_unresolved") {
+        lines.push(`  Still open at the venue: ${r.stillOpen.join(", ")}. The hold stays. Ask again shortly.`);
+      } else {
+        lines.push("  The hold against the caps is released.");
+      }
+      return text(lines.join("\n"));
+    } catch (err) {
+      return fail(describeError(err));
+    }
   },
 );
 

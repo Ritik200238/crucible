@@ -110,7 +110,7 @@ after(() => client.stop());
 const textOf = (r: Reply) => r.result?.content?.[0]?.text ?? "";
 
 describe("what the server offers an agent", () => {
-  test("exactly the eight documented tools, no more", () => {
+  test("exactly the nine documented tools, no more", () => {
     return client.send("tools/list").then((r) => {
       const names = (r.result?.tools ?? []).map((t) => t.name).sort();
       assert.deepEqual(names, [
@@ -119,6 +119,7 @@ describe("what the server offers an agent", () => {
         "execute",
         "policy",
         "quote",
+        "reconcile",
         "route",
         "status",
         "verify_ledger",

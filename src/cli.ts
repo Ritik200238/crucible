@@ -21,9 +21,9 @@ import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
 import { verifyLedger } from "./ledger/verify.ts";
-import { execute, ExecutionError } from "./exec/execute.ts";
+import { execute, ExecutionError, reconcile } from "./exec/execute.ts";
 import { calibration } from "./exec/calibration.ts";
-import { credentialsFromEnv } from "./exec/binance-rest.ts";
+import { credentialsFromEnv, type Credentials } from "./exec/binance-rest.ts";
 import { Ledger } from "./ledger/chain.ts";
 import { deriveState, emptyState } from "./risk/state.ts";
 import { DEMO, MAINNET } from "./exec/binance-rest.ts";
@@ -499,8 +499,80 @@ async function cmdStatus(args: Map<string, string>): Promise<number> {
       ? `  ${c.red("●")} Execution    ${c.bold("ENABLED")} — orders will be transmitted`
       : `  ${c.green("○")} Execution    ${c.dim(`disabled (mode "${policy.mode}", CRUCIBLE_LIVE ${process.env.CRUCIBLE_LIVE === "1" ? "set" : "unset"})`)}`,
   );
+
+  // Orders that left for a venue and were never read back. Shown here because
+  // this is the screen an operator looks at when something felt wrong, and an
+  // order in this state is the one thing that must not be retried blind.
+  const unresolved = rollingState().unresolved;
+  if (unresolved.length > 0) {
+    console.log();
+    console.log(`  ${c.red("!")} ${c.bold(`${unresolved.length} order(s) sent and not yet resolved`)}`);
+    for (const u of unresolved) {
+      console.log(
+        `      plan ${u.planId}  ${u.venue}  ref ${u.reference}  $${u.quoteQty.toFixed(2)} held since ${u.since}`,
+      );
+    }
+    console.log(c.dim(`      Their notional counts against your caps until: crucible reconcile --plan <id>`));
+  }
   console.log();
   return 0;
+}
+
+/**
+ * Close an order whose outcome this process lost.
+ *
+ * Reads the venue again and writes what it said. Nothing here guesses: an
+ * order the venue still reports as open stays held.
+ */
+async function cmdReconcile(args: Map<string, string>): Promise<number> {
+  const planId = args.get("plan");
+  if (!planId || planId === "true") {
+    console.error("  Give the plan to reconcile: crucible reconcile --plan <id>");
+    return 2;
+  }
+
+  let binance: { baseUrl: string; credentials: Credentials } | undefined;
+  try {
+    binance = { baseUrl: process.env.CRUCIBLE_BINANCE_BASE ?? DEMO, credentials: credentialsFromEnv() };
+  } catch {
+    binance = undefined;
+  }
+
+  const result = await reconcile({ planId, ledger: new Ledger(), ...(binance ? { binance } : {}) });
+
+  console.log();
+  console.log(`  ${c.bold("RECONCILED")}  plan ${result.planId}`);
+  switch (result.outcome) {
+    case "filled":
+      console.log(`  ${c.green("●")} The venue reports it filled. Booked as a fill; the hold is released.`);
+      break;
+    case "partial":
+      console.log(`  ${c.yellow("●")} Partly filled. What traded is booked; the hold is released.`);
+      break;
+    case "never_filled":
+      console.log(`  ${c.dim("○")} The venue reports it never filled. Nothing booked; the hold is released.`);
+      break;
+    case "still_unresolved":
+      console.log(
+        `  ${c.red("!")} Still open at the venue: ${result.stillOpen.join(", ")}. The hold stays. Try again shortly.`,
+      );
+      break;
+  }
+  for (const f of result.fills) {
+    console.log(
+      `      ${f.venue}  ${f.status}  ${f.filledBaseQty.toFixed(6)} @ ${f.avgPrice.toFixed(4)}  ref ${f.reference}`,
+    );
+  }
+  if (result.realisedBps !== null) {
+    console.log(
+      `      realised ${result.realisedBps.toFixed(2)} bps` +
+        (result.errorBps !== null
+          ? `, ${result.errorBps >= 0 ? "+" : ""}${result.errorBps.toFixed(2)} bps against the prediction`
+          : ""),
+    );
+  }
+  console.log();
+  return result.outcome === "still_unresolved" ? 1 : 0;
 }
 
 /**
@@ -618,6 +690,7 @@ async function main(): Promise<number> {
       case "status": return await cmdStatus(args);
       case "verify": return cmdVerify();
       case "calibration": return cmdCalibration(args);
+      case "reconcile": return await cmdReconcile(args);
       case "sample": return await cmdSample();
       case "samples": return cmdSamples(args);
       case undefined:

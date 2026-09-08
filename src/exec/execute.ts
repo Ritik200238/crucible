@@ -19,21 +19,72 @@
 import { assertExecutable, RouteError } from "../decide/router.ts";
 import { Ledger } from "../ledger/chain.ts";
 import { NATIVE_BNB, TOKENS } from "../venues/onchain.ts";
-import { roundToStep } from "../venues/binance.ts";
+import { fetchSymbolFilters, roundToStep } from "../venues/binance.ts";
 import {
   BinanceApiError,
   BinanceRest,
   toConfirmedFill,
   type Credentials,
 } from "./binance-rest.ts";
-import { executeSwap, walletLimits, walletStatus, WalletError } from "./wallet.ts";
-import type { ConfirmedFill, Plan, Policy, Receipt, Snapshot } from "../types.ts";
+import {
+  awaitSwap,
+  getSwapOrder,
+  submitSwap,
+  walletLimits,
+  walletStatus,
+  WalletError,
+  type SwapOrder,
+} from "./wallet.ts";
+import type { ConfirmedFill, Plan, Policy, Receipt, Side, Snapshot, Venue } from "../types.ts";
 
 export class ExecutionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ExecutionError";
   }
+}
+
+/**
+ * An order left for the venue and its outcome could not be established.
+ *
+ * This is not a failure and must never be reported as one. A failure means
+ * nothing was sent; this means something was, and the honest state is "unknown"
+ * until the venue is asked again. It is a separate class so a caller can tell
+ * the two apart without parsing a message, because the correct next action is
+ * different: a failure may be retried, and an unconfirmed order must not be.
+ */
+export class UnconfirmedError extends ExecutionError {
+  readonly planId: string;
+  readonly submitted: SubmittedOrder[];
+  constructor(message: string, planId: string, submitted: SubmittedOrder[]) {
+    super(message);
+    this.name = "UnconfirmedError";
+    this.planId = planId;
+    this.submitted = submitted;
+  }
+}
+
+/** What was sent to a venue, recorded the moment it was accepted. */
+export interface SubmittedOrder {
+  venue: Venue;
+  /** The venue's own identifier: an exchange order id, or a wallet swap order id. */
+  reference: string;
+  baseQty: number;
+  /** Notional at the snapshot mid. Reserved against the caps until resolved. */
+  quoteQty: number;
+}
+
+/**
+ * How the venue legs report back while an execution is in flight.
+ *
+ * `submitted` fires the instant a venue accepts an order, before any attempt to
+ * learn what became of it. `confirmed` fires once a fill has been read back.
+ * Between the two, money may have moved; the outer path uses the gap to decide
+ * whether a failure is a failure or an unknown.
+ */
+interface Progress {
+  submitted(order: SubmittedOrder): void;
+  confirmed(fill: ConfirmedFill): void;
 }
 
 export interface ExecuteOptions {
@@ -110,7 +161,7 @@ export function assertSpendable(plan: Plan, ledger: Ledger): void {
 }
 
 /** Execute the exchange leg. */
-async function executeBinance(opts: ExecuteOptions): Promise<ConfirmedFill[]> {
+async function executeBinance(opts: ExecuteOptions, progress: Progress): Promise<ConfirmedFill[]> {
   const { plan, snapshot } = opts;
   if (!opts.binance) {
     throw new ExecutionError(
@@ -156,16 +207,27 @@ async function executeBinance(opts: ExecuteOptions): Promise<ConfirmedFill[]> {
     await client.testOrder(params);
 
     const placed = await client.newOrder(params);
+    // From here the order exists on the exchange whatever happens next. The
+    // read-back can time out, the network can drop, the process can die; none
+    // of those un-send it, so it is recorded as sent before any of them can.
+    progress.submitted({
+      venue: "BINANCE_SPOT",
+      reference: String(placed.orderId),
+      baseQty: qty,
+      quoteQty: qty * snapshot.mid,
+    });
     const settled = await client.awaitTerminal(snapshot.symbol, placed.orderId);
     const trades = await client.myTrades(snapshot.symbol, placed.orderId);
-    fills.push(toConfirmedFill(settled, trades, snapshot.filters));
+    const fill = toConfirmedFill(settled, trades, snapshot.filters);
+    progress.confirmed(fill);
+    fills.push(fill);
   }
 
   return fills;
 }
 
 /** Execute the on-chain leg through the wallet. */
-async function executeOnchain(opts: ExecuteOptions): Promise<ConfirmedFill[]> {
+async function executeOnchain(opts: ExecuteOptions, progress: Progress): Promise<ConfirmedFill[]> {
   const { plan, snapshot } = opts;
 
   const session = await walletStatus();
@@ -202,36 +264,90 @@ async function executeOnchain(opts: ExecuteOptions): Promise<ConfirmedFill[]> {
   const toToken = buying ? (base.symbol === "WBNB" ? NATIVE_BNB : base.address) : quote.address;
   const fromTokenQty = buying ? plan.quoteQty : plan.baseQty;
 
-  const order = await executeSwap({
+  const orderId = await submitSwap({
     fromToken,
     toToken,
     fromTokenQty: Number(fromTokenQty.toFixed(8)),
     slippage: "auto",
     mevProtection: true,
   });
+  // The wallet has the swap and will broadcast it on its own schedule. Whether
+  // this process is still around to see the result changes nothing on-chain.
+  progress.submitted({
+    venue: "ONCHAIN",
+    reference: orderId,
+    baseQty: plan.baseQty,
+    quoteQty: plan.quoteQty,
+  });
 
+  const fill = swapToFill(await awaitSwap(orderId), buying);
+  progress.confirmed(fill);
+  return [fill];
+}
+
+/** Turn a terminal swap order into a fill, in the plan's own terms. */
+function swapToFill(order: SwapOrder, buying: boolean): ConfirmedFill {
   const filledBase = buying ? order.toTokenQty : order.fromTokenQty;
   const filledQuote = buying ? order.fromTokenQty : order.toTokenQty;
+  return {
+    venue: "ONCHAIN",
+    status: order.status === "FINISHED" ? "FILLED" : "FAILED",
+    filledBaseQty: filledBase,
+    filledQuoteQty: filledQuote,
+    avgPrice: filledBase > 0 ? filledQuote / filledBase : 0,
+    // The pool fee is taken inside the swap and is already reflected in the
+    // amount received, so there is no separate commission to report. Gas is
+    // paid in the chain's native asset and is not a commission either.
+    fees: [],
+    totalFeeInQuote: 0,
+    isMaker: false,
+    reference: order.txHash ?? order.orderId,
+    confirmedBy: order.txHash
+      ? `baw market-order list, terminal status ${order.status}, tx ${order.txHash}`
+      : `baw market-order list, terminal status ${order.status} with no transaction hash`,
+  };
+}
 
-  return [
-    {
-      venue: "ONCHAIN",
-      status: order.status === "FINISHED" ? "FILLED" : "FAILED",
-      filledBaseQty: filledBase,
-      filledQuoteQty: filledQuote,
-      avgPrice: filledBase > 0 ? filledQuote / filledBase : 0,
-      // The pool fee is taken inside the swap and is already reflected in the
-      // amount received, so there is no separate commission to report. Gas is
-      // paid in the chain's native asset and is not a commission either.
-      fees: [],
-      totalFeeInQuote: 0,
-      isMaker: false,
-      reference: order.txHash ?? order.orderId,
-      confirmedBy: order.txHash
-        ? `baw market-order list, terminal status ${order.status}, tx ${order.txHash}`
-        : `baw market-order list, terminal status ${order.status} with no transaction hash`,
-    },
-  ];
+/**
+ * The realised cost of a set of fills against the mid they were priced from.
+ *
+ * Shared by the receipt and by reconciliation, so a fill that arrives late is
+ * costed by exactly the arithmetic a fill that arrived on time would have been.
+ */
+export function realisedCost(
+  fills: ConfirmedFill[],
+  mid: number,
+  side: Side,
+): { grossBps: number; feeBps: number | null; bps: number | null; filledQuote: number; unpriceable: number } {
+  const filledBase = fills.reduce((a, f) => a + f.filledBaseQty, 0);
+  const filledQuote = fills.reduce((a, f) => a + f.filledQuoteQty, 0);
+  const direction = side === "BUY" ? 1 : -1;
+
+  const avgPrice = filledBase > 0 ? filledQuote / filledBase : 0;
+  const grossBps = filledBase > 0 ? ((avgPrice - mid) / mid) * 10_000 * direction : 0;
+
+  // Commission has to be added in, or the comparison is not one. The prediction
+  // carries the taker fee as its largest component, so leaving it out of the
+  // realised side understates the cost by about that fee on every fill.
+  //
+  // A fee charged in an asset this fill cannot price is not folded in silently.
+  // The realised figure is reported as unavailable instead, because a number
+  // that is quietly missing a component is worse than an absent one.
+  const unpriceable = fills.filter((f) => f.totalFeeInQuote === null).length;
+  const feeInQuote = fills.reduce((a, f) => a + (f.totalFeeInQuote ?? 0), 0);
+
+  // Nothing filled is not the same as a fee that cannot be priced. An order
+  // that traded nothing cost nothing, and reporting that as unavailable would
+  // hide a clean fact behind a caveat meant for a different problem.
+  const feeBps = filledQuote <= 0 ? 0 : unpriceable > 0 ? null : (feeInQuote / filledQuote) * 10_000;
+
+  return {
+    grossBps,
+    feeBps,
+    bps: feeBps === null ? null : grossBps + feeBps,
+    filledQuote,
+    unpriceable,
+  };
 }
 
 /**
@@ -248,36 +364,13 @@ export function buildReceipt(
   fills: ConfirmedFill[],
   completedAt = Date.now(),
 ): Receipt {
-  const filledBase = fills.reduce((a, f) => a + f.filledBaseQty, 0);
-  const filledQuote = fills.reduce((a, f) => a + f.filledQuoteQty, 0);
-  const direction = plan.intent.side === "BUY" ? 1 : -1;
-
-  const avgPrice = filledBase > 0 ? filledQuote / filledBase : 0;
-  const realisedGrossBps =
-    filledBase > 0 ? ((avgPrice - snapshot.mid) / snapshot.mid) * 10_000 * direction : 0;
-
-  // Commission has to be added in, or the comparison is not one. The prediction
-  // carries the taker fee as its largest component, so leaving it out of the
-  // realised side understates the cost by about that fee on every fill.
-  //
-  // A fee charged in an asset this fill cannot price is not folded in silently.
-  // The realised figure is reported as unavailable instead, because a number
-  // that is quietly missing a component is worse than an absent one.
-  const unpriceable = fills.filter((f) => f.totalFeeInQuote === null);
-  const feeInQuote = fills.reduce((a, f) => a + (f.totalFeeInQuote ?? 0), 0);
-
-  // Nothing filled is not the same as a fee that cannot be priced. An order
-  // that traded nothing cost nothing, and reporting that as unavailable would
-  // hide a clean fact behind a caveat meant for a different problem.
-  const realisedFeeBps =
-    filledQuote <= 0 ? 0 : unpriceable.length > 0 ? null : (feeInQuote / filledQuote) * 10_000;
-
-  const realisedBps = realisedFeeBps === null ? null : realisedGrossBps + realisedFeeBps;
+  const cost = realisedCost(fills, snapshot.mid, plan.intent.side);
+  const { grossBps: realisedGrossBps, feeBps: realisedFeeBps, bps: realisedBps, filledQuote } = cost;
   const alternative = plan.alternatives.find((a) => !a.unavailable) ?? null;
 
   const errorUnavailable =
     realisedBps === null
-      ? `Commission on ${unpriceable.length} fill(s) was charged in an asset that cannot be ` +
+      ? `Commission on ${cost.unpriceable} fill(s) was charged in an asset that cannot be ` +
         `priced against ${snapshot.filters.quoteAsset} from this trade, so the realised cost ` +
         `cannot be completed and the comparison against the prediction is not made.`
       : undefined;
@@ -347,17 +440,81 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
     predictedBps: plan.chosen.totalBps,
   });
 
+  // What has left for a venue, and what has been read back. The difference
+  // between the two lists is the set of orders whose outcome is unknown.
+  const submitted: SubmittedOrder[] = [];
+  const confirmed: ConfirmedFill[] = [];
+  const progress: Progress = {
+    submitted: (order) => {
+      submitted.push(order);
+      record("execution.submitted", {
+        planId: plan.id,
+        fingerprint: plan.fingerprint,
+        venue: order.venue,
+        reference: order.reference,
+        baseQty: order.baseQty,
+        quoteQty: order.quoteQty,
+      });
+    },
+    confirmed: (fill) => confirmed.push(fill),
+  };
+
   let fills: ConfirmedFill[];
   try {
     fills =
-      plan.chosen.venue === "ONCHAIN" ? await executeOnchain(opts) : await executeBinance(opts);
+      plan.chosen.venue === "ONCHAIN"
+        ? await executeOnchain(opts, progress)
+        : await executeBinance(opts, progress);
   } catch (err) {
     const message =
       err instanceof BinanceApiError || err instanceof WalletError || err instanceof RouteError
         ? err.message
         : `Unexpected failure: ${(err as Error).message}`;
-    record("execution.failed", { planId: plan.id, fingerprint: plan.fingerprint, reason: message });
-    throw new ExecutionError(message);
+
+    // Anything sent but not read back is unresolved. "Failed" is reserved for
+    // the case where nothing reached a venue, because the two call for opposite
+    // responses: a failure can be retried and an unresolved order must not be.
+    const unresolved = submitted.filter(
+      (s) => !confirmed.some((f) => f.reference === s.reference),
+    );
+
+    if (unresolved.length === 0) {
+      record("execution.failed", {
+        planId: plan.id,
+        fingerprint: plan.fingerprint,
+        reason: message,
+        symbol: snapshot.symbol,
+        side: plan.intent.side,
+        // Fills that did confirm before the failure moved money and are
+        // counted, even though the plan as a whole did not complete.
+        confirmedFills: confirmed,
+      });
+      throw new ExecutionError(
+        confirmed.length > 0
+          ? `${confirmed.length} of ${submitted.length + 1} order(s) filled before the plan failed: ${message}`
+          : message,
+      );
+    }
+
+    record("execution.unconfirmed", {
+      planId: plan.id,
+      fingerprint: plan.fingerprint,
+      symbol: snapshot.symbol,
+      side: plan.intent.side,
+      mid: snapshot.mid,
+      predictedBps: plan.chosen.totalBps,
+      submitted: unresolved,
+      confirmedFills: confirmed,
+      reason: message,
+    });
+    throw new UnconfirmedError(
+      `Plan ${plan.id} sent ${unresolved.length} order(s) whose outcome could not be established: ${message} ` +
+        `The order was not refused and it did not fail — it was sent, and the venue has not yet said what ` +
+        `became of it. Its notional is held against your caps until it is resolved. Do not retry blind: ` +
+        `run \`crucible reconcile --plan ${plan.id}\` to read it back from the venue.`,
+      plan.id,
+      unresolved,
+    );
   }
 
   const receipt = buildReceipt(plan, snapshot, fills, Date.now());
@@ -377,4 +534,167 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
     savingUsd: receipt.savingUsd,
   });
   return receipt;
+}
+
+// ---------------------------------------------------------------------------
+// Reconciliation
+// ---------------------------------------------------------------------------
+
+export interface ReconcileOptions {
+  planId: string;
+  ledger?: Ledger;
+  binance?: { baseUrl: string; credentials: Credentials; fetchImpl?: typeof fetch };
+  /** The symbol's filters, for reading a fill back. Fetched from the exchange when absent. */
+  filters?: Snapshot["filters"];
+  /** How the on-chain side is read back. Defaults to the wallet CLI. */
+  swapLookup?: (orderId: string) => Promise<SwapOrder>;
+  /** How the symbol's filters are fetched when not supplied. */
+  filtersLookup?: (symbol: string) => Promise<Snapshot["filters"]>;
+}
+
+export interface Reconciliation {
+  planId: string;
+  /** What each unresolved order turned out to be. */
+  fills: ConfirmedFill[];
+  outcome: "filled" | "partial" | "never_filled" | "still_unresolved";
+  realisedBps: number | null;
+  errorBps: number | null;
+  /** References the venue still reports as open. Their hold stays in place. */
+  stillOpen: string[];
+}
+
+interface UnconfirmedPayload {
+  planId?: string;
+  fingerprint?: string;
+  symbol?: string;
+  side?: Side;
+  mid?: number;
+  predictedBps?: number;
+  submitted?: SubmittedOrder[];
+  confirmedFills?: ConfirmedFill[];
+}
+
+/**
+ * Ask the venue what became of an order this process lost track of.
+ *
+ * The record it closes is the one thing in the ledger that says "unknown". It
+ * stays unknown — and its notional stays reserved against the caps — until this
+ * has been run and the venue has answered. That is deliberate: a system that
+ * freed the budget on a timeout is a system that can be made to forget an
+ * order by making the network slow at the right moment.
+ *
+ * The answer is written as its own record rather than by editing the old one,
+ * because the ledger is append-only and because "we did not know, and then we
+ * found out" is a truer account than one that never admitted the gap.
+ */
+export async function reconcile(opts: ReconcileOptions): Promise<Reconciliation> {
+  const ledger = opts.ledger ?? new Ledger();
+  const records = ledger.read();
+
+  const open = records.find(
+    (r) =>
+      r.kind === "execution.unconfirmed" &&
+      (r.payload as UnconfirmedPayload)?.planId === opts.planId &&
+      !records.some(
+        (later) =>
+          later.seq > r.seq &&
+          later.kind === "execution.reconciled" &&
+          (later.payload as { planId?: string })?.planId === opts.planId,
+      ),
+  );
+  if (!open) {
+    throw new ExecutionError(
+      `Plan ${opts.planId} has no unresolved order on the record. Either it was never sent, it ` +
+        `completed normally, or it has already been reconciled — check with: crucible verify`,
+    );
+  }
+
+  const payload = open.payload as UnconfirmedPayload;
+  const submitted = payload.submitted ?? [];
+  const symbol = payload.symbol ?? "";
+  const side: Side = payload.side ?? "BUY";
+  const mid = payload.mid ?? 0;
+
+  const fills: ConfirmedFill[] = [];
+  const stillOpen: string[] = [];
+
+  for (const order of submitted) {
+    if (order.venue === "BINANCE_SPOT") {
+      if (!opts.binance) {
+        throw new ExecutionError(
+          `Order ${order.reference} is on Binance, but no exchange credentials were supplied to read it back. ` +
+            `Set BINANCE_API_KEY and BINANCE_API_SECRET and run the reconcile again.`,
+        );
+      }
+      const client = new BinanceRest({
+        baseUrl: opts.binance.baseUrl,
+        credentials: opts.binance.credentials,
+        ...(opts.binance.fetchImpl ? { fetchImpl: opts.binance.fetchImpl } : {}),
+      });
+      await client.syncClock();
+      const current = await client.queryOrder(symbol, Number(order.reference));
+      const terminal = new Set(["FILLED", "CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"]);
+      if (!terminal.has(current.status)) {
+        stillOpen.push(order.reference);
+        continue;
+      }
+      const filters =
+        opts.filters ??
+        (await (opts.filtersLookup ?? fetchSymbolFilters)(symbol));
+      const trades = await client.myTrades(symbol, Number(order.reference));
+      fills.push(toConfirmedFill(current, trades, filters));
+    } else {
+      const lookup = opts.swapLookup ?? ((id: string) => getSwapOrder(id));
+      const swap = await lookup(order.reference);
+      if (swap.status !== "FINISHED" && swap.status !== "FAILED") {
+        stillOpen.push(order.reference);
+        continue;
+      }
+      fills.push(swapToFill(swap, side === "BUY"));
+    }
+  }
+
+  const traded = fills.filter((f) => f.status === "FILLED" || f.status === "PARTIAL");
+  const cost = mid > 0 ? realisedCost(traded, mid, side) : null;
+  const realisedBps = cost?.bps ?? null;
+  const predicted = payload.predictedBps;
+
+  let outcome: Reconciliation["outcome"];
+  if (stillOpen.length > 0) outcome = "still_unresolved";
+  else if (traded.length === 0) outcome = "never_filled";
+  else if (traded.length === submitted.length && traded.every((f) => f.status === "FILLED")) outcome = "filled";
+  else outcome = "partial";
+
+  const result: Reconciliation = {
+    planId: opts.planId,
+    fills,
+    outcome,
+    realisedBps,
+    errorBps: realisedBps !== null && typeof predicted === "number" ? realisedBps - predicted : null,
+    stillOpen,
+  };
+
+  // Only a settled answer closes the hold. "Still open" is recorded so the
+  // attempt is on the chain, but the unconfirmed record stays in force.
+  if (outcome !== "still_unresolved") {
+    ledger.append("execution.reconciled", {
+      planId: opts.planId,
+      fingerprint: payload.fingerprint,
+      venue: submitted[0]?.venue,
+      symbol,
+      side,
+      fills,
+      outcome,
+      predictedBps: predicted,
+      realisedBps,
+      errorBps: result.errorBps,
+    });
+  } else {
+    ledger.append("execution.reconcile_attempted", {
+      planId: opts.planId,
+      stillOpen,
+    });
+  }
+
+  return result;
 }

@@ -16,11 +16,26 @@
 import type { LedgerRecord } from "../ledger/chain.ts";
 import type { ConfirmedFill, RollingState, Side } from "../types.ts";
 
-/** Only completed executions move the counters. A refusal moved no money. */
+/**
+ * Which records move money.
+ *
+ * A refusal moved nothing. A completed execution moved what its fills say. A
+ * failed or unconfirmed one moved whatever confirmed before it went wrong, and
+ * an unconfirmed one additionally has orders in flight whose outcome nobody
+ * knows yet — those reserve their notional until a reconciliation says
+ * otherwise. Not knowing is not the same as knowing it did not happen, and a
+ * counter that frees budget on ignorance is one that can be made to forget.
+ */
 const COMPLETED = "execution.completed";
+const FAILED = "execution.failed";
+const UNCONFIRMED = "execution.unconfirmed";
+const RECONCILED = "execution.reconciled";
 
-interface CompletedPayload {
+interface MoneyPayload {
+  planId?: string;
   fills?: ConfirmedFill[];
+  confirmedFills?: ConfirmedFill[];
+  submitted?: { venue: string; reference: string; baseQty: number; quoteQty: number }[];
   side?: Side;
   symbol?: string;
 }
@@ -54,15 +69,51 @@ export function deriveState(records: LedgerRecord[], now = Date.now()): RollingS
   let realisedPnlTodayUsd = 0;
   let lastLossAt: string | null = null;
   const recentOrderTimes: string[] = [];
+  const unresolved: RollingState["unresolved"] = [];
+
+  // A reconciliation closes the unconfirmed record it answers. Collected first
+  // so an unconfirmed record can be judged against reconciliations that come
+  // after it in the file.
+  const reconciledPlans = new Set<string>();
+  for (const record of records) {
+    if (record.kind !== RECONCILED) continue;
+    const planId = (record.payload as MoneyPayload)?.planId;
+    if (planId) reconciledPlans.add(planId);
+  }
 
   for (const record of records) {
-    if (record.kind !== COMPLETED) continue;
-
     const at = Date.parse(record.timestamp);
     if (!Number.isFinite(at)) continue;
+    const payload = (record.payload ?? {}) as MoneyPayload;
 
-    const payload = (record.payload ?? {}) as CompletedPayload;
-    const fills = Array.isArray(payload.fills) ? payload.fills : [];
+    let fills: ConfirmedFill[];
+    if (record.kind === COMPLETED || record.kind === RECONCILED) {
+      fills = Array.isArray(payload.fills) ? payload.fills : [];
+    } else if (record.kind === FAILED || record.kind === UNCONFIRMED) {
+      fills = Array.isArray(payload.confirmedFills) ? payload.confirmedFills : [];
+    } else {
+      continue;
+    }
+
+    // Orders sent and not read back hold their notional until a reconciliation
+    // says what became of them. They count as orders too: a rate brake that
+    // ignored in-flight orders would let a burst through on a slow network.
+    if (record.kind === UNCONFIRMED && payload.planId && !reconciledPlans.has(payload.planId)) {
+      for (const order of payload.submitted ?? []) {
+        if (at >= Date.parse(`${today}T00:00:00.000Z`)) {
+          notionalTodayUsd += order.quoteQty;
+          ordersToday++;
+        }
+        if (at >= hourAgo) recentOrderTimes.push(new Date(at).toISOString());
+        unresolved.push({
+          planId: payload.planId,
+          venue: order.venue,
+          reference: order.reference,
+          quoteQty: order.quoteQty,
+          since: record.timestamp,
+        });
+      }
+    }
 
     for (const fill of fills) {
       // A fill that never happened moves nothing. FAILED and PENDING are both
@@ -109,6 +160,7 @@ export function deriveState(records: LedgerRecord[], now = Date.now()): RollingS
     recentOrderTimes,
     lastLossAt,
     realisedPnlTodayUsd,
+    unresolved,
   };
 }
 
@@ -121,5 +173,6 @@ export function emptyState(now = Date.now()): RollingState {
     recentOrderTimes: [],
     lastLossAt: null,
     realisedPnlTodayUsd: 0,
+    unresolved: [],
   };
 }

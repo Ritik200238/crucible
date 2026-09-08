@@ -171,11 +171,20 @@ claude mcp add crucible -- node --experimental-strip-types /absolute/path/to/cru
 | `evidence` | The recorded venue comparison |
 | `verify_ledger` | Recompute the hash chain and check the signature |
 | `calibration` | How wrong the cost model has been against real fills |
+| `reconcile` | Resolve an order that was sent but never read back |
 | `status` | Whether each execution path can actually be reached |
 
 `execute` takes **only a plan id**. The plan is the authorisation, so an agent
 cannot alter the order between the decision and the fill — any change produces a
 different plan, which has to clear the gates again.
+
+A write is a lifecycle, not an event. `execute` records the order the instant a
+venue accepts it, before trying to learn what became of it. If the read-back
+then fails, the result is **unconfirmed** — a separate error class from a
+failure, because the right response is the opposite: a failure can be retried,
+an unconfirmed order must not be. Its notional stays held against every cap
+until `reconcile` asks the venue and gets an answer. Not knowing is never
+treated as knowing it did not happen.
 
 ## How it is built
 

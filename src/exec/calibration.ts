@@ -14,10 +14,18 @@
 import type { LedgerRecord } from "../ledger/chain.ts";
 import type { Venue } from "../types.ts";
 
+/**
+ * Both kinds of record that carry a prediction and an outcome. A reconciled
+ * fill arrived late, but it is still a real fill against a real prediction,
+ * and the model is graded on it like any other. Only a reconciliation that
+ * found something traded qualifies; one that found nothing has no cost.
+ */
 const COMPLETED = "execution.completed";
+const RECONCILED = "execution.reconciled";
 
 interface CompletedPayload {
   venue?: Venue;
+  outcome?: string;
   predictedBps?: number;
   realisedBps?: number | null;
   errorBps?: number | null;
@@ -75,8 +83,9 @@ export function calibration(records: LedgerRecord[]): CalibrationReport {
   let incomparable = 0;
 
   for (const record of records) {
-    if (record.kind !== COMPLETED) continue;
+    if (record.kind !== COMPLETED && record.kind !== RECONCILED) continue;
     const p = (record.payload ?? {}) as CompletedPayload;
+    if (record.kind === RECONCILED && p.outcome !== "filled" && p.outcome !== "partial") continue;
 
     if (
       typeof p.predictedBps !== "number" ||

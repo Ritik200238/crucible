@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { DEFAULT_POLICY } from "../src/config.ts";
 import { priceAllRoutes } from "../src/cost/model.ts";
 import { measuredImpactBps, route, RouteError } from "../src/decide/router.ts";
-import { execute, ExecutionError } from "../src/exec/execute.ts";
+import { deriveState } from "../src/risk/state.ts";
+import { execute, ExecutionError, UnconfirmedError } from "../src/exec/execute.ts";
 import type { Credentials } from "../src/exec/binance-rest.ts";
 import { Ledger } from "../src/ledger/chain.ts";
 import { verifyChain, verifyLedger } from "../src/ledger/verify.ts";
@@ -605,9 +606,11 @@ test("an order that never leaves NEW is reported as unresolved, not as a fill", 
   await attempt;
 
   assert.equal(venue.placed[0]!.status, "FILLED");
+  // Not a failure. The order left, and the honest state is unknown — which is
+  // its own class so a caller can tell "retry" apart from "do not retry".
   assert.ok(
-    settled instanceof ExecutionError,
-    `expected an ExecutionError, got ${String(settled)}`,
+    settled instanceof UnconfirmedError,
+    `expected an UnconfirmedError, got ${String(settled)}`,
   );
   const orderId = String(venue.placed[0]!.orderId);
   assert.ok(
@@ -615,14 +618,25 @@ test("an order that never leaves NEW is reported as unresolved, not as a fill", 
     `the message must name order ${orderId}: ${settled.message}`,
   );
   assert.match(settled.message, /still NEW/);
+  assert.match(settled.message, /crucible reconcile --plan/);
+  assert.match(settled.message, /Do not retry blind/);
+  assert.equal(settled.submitted[0]!.reference, orderId);
   assert.equal(
     venue.calls.some((c) => c.path === "/api/v3/myTrades"),
     false,
   );
   assert.deepEqual(
     ledger.read().map((r) => r.kind),
-    ["execution.started", "execution.failed"],
+    ["execution.started", "execution.submitted", "execution.unconfirmed"],
   );
+
+  // The unresolved order holds its notional against the caps. Freeing it on a
+  // timeout would let a slow network erase an order from the daily total.
+  const state = deriveState(ledger.read(), TAKEN_AT);
+  assert.equal(state.unresolved.length, 1);
+  assert.equal(state.unresolved[0]!.reference, orderId);
+  assert.equal(state.ordersToday, 1);
+  closeTo(state.notionalTodayUsd, plan.baseQty * DEEP.mid);
 });
 
 // ---------------------------------------------------------------------------
@@ -701,7 +715,7 @@ test("an expired plan refuses and transmits nothing", async () => {
 // The ledger
 // ---------------------------------------------------------------------------
 
-test("a completed execution leaves a signed, verifiable pair of records", async () => {
+test("a completed execution leaves a signed, verifiable trail of records", async () => {
   process.env.CRUCIBLE_LIVE = "1";
   const plan = route({ intent: BUY_TWO, snapshot: DEEP, policy: LIVE_POLICY });
   const venue = simulatedVenue();
@@ -711,14 +725,20 @@ test("a completed execution leaves a signed, verifiable pair of records", async 
   const records = ledger.read();
   assert.deepEqual(
     records.map((r) => r.kind),
-    ["execution.started", "execution.completed"],
+    ["execution.started", "execution.submitted", "execution.completed"],
   );
 
   const started = records[0]!.payload as { venue: string; predictedBps: number };
   assert.equal(started.venue, "BINANCE_SPOT");
   closeTo(started.predictedBps, plan.chosen.totalBps);
 
-  const completed = records[1]!.payload as { realisedBps: number | null; errorBps: number | null };
+  // The moment the exchange accepted it, with the exchange's own id, so a
+  // crash between here and the read-back leaves a record of what was sent.
+  const submitted = records[1]!.payload as { reference: string; quoteQty: number };
+  assert.equal(submitted.reference, String(venue.placed[0]!.orderId));
+  closeTo(submitted.quoteQty, plan.baseQty * DEEP.mid);
+
+  const completed = records[2]!.payload as { realisedBps: number | null; errorBps: number | null };
   closeTo(completed.realisedBps, receipt.realisedBps);
   closeTo(completed.errorBps, receipt.errorBps);
 
@@ -726,7 +746,7 @@ test("a completed execution leaves a signed, verifiable pair of records", async 
 
   const onDisk = verifyLedger({ dir: ledger.paths.dir });
   assert.equal(onDisk.ok, true);
-  assert.equal(onDisk.records, 2);
+  assert.equal(onDisk.records, 3);
   assert.equal(onDisk.signatureValid, true);
 });
 

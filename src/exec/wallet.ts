@@ -279,31 +279,50 @@ export async function getSwapOrder(orderId: string, opts: WalletOptions = {}): P
  * what it is. Running out of patience is different from failing, and that does
  * throw, because "still pending" is not an outcome anyone can act on.
  */
-export async function executeSwap(
-  p: SwapParams,
-  opts: WalletOptions & { pollMs?: number; timeoutMs?: number } = {},
-): Promise<SwapOrder> {
+/**
+ * Ask the wallet to perform a swap, and return its order id.
+ *
+ * Deliberately separate from waiting for it. Once this returns, money is in
+ * motion whether or not the caller ever learns the outcome, and the caller
+ * has to be able to record that moment before anything else can go wrong.
+ */
+export async function submitSwap(p: SwapParams, opts: WalletOptions = {}): Promise<string> {
   const submitted = await run<{ orderId: string }>(
     ["market-order", "swap", ...swapArgs(p), "--json"],
     opts,
   );
-  const orderId = String(submitted.orderId);
+  const orderId = String(submitted.orderId ?? "");
   if (!orderId) throw new WalletError("The wallet accepted the swap but returned no order id.");
+  return orderId;
+}
 
+/** Poll a submitted swap until the wallet reports a terminal status. */
+export async function awaitSwap(
+  orderId: string,
+  opts: WalletOptions & { pollMs?: number; timeoutMs?: number } = {},
+): Promise<SwapOrder> {
   const pollMs = opts.pollMs ?? 2000;
-  const deadline = Date.now() + (opts.timeoutMs ?? 90_000);
+  const timeoutMs = opts.timeoutMs ?? 90_000;
+  const deadline = Date.now() + timeoutMs;
 
   for (;;) {
     const order = await getSwapOrder(orderId, opts);
     if (order.status === "FINISHED" || order.status === "FAILED") return order;
     if (Date.now() > deadline) {
       throw new WalletError(
-        `Swap ${orderId} is still PENDING after ${Math.round((opts.timeoutMs ?? 90_000) / 1000)}s. ` +
+        `Swap ${orderId} is still PENDING after ${Math.round(timeoutMs / 1000)}s. ` +
           `It has not failed and it has not settled. Check it with: baw market-order list --orderId ${orderId} --json`,
       );
     }
     await new Promise((r) => setTimeout(r, pollMs));
   }
+}
+
+export async function executeSwap(
+  p: SwapParams,
+  opts: WalletOptions & { pollMs?: number; timeoutMs?: number } = {},
+): Promise<SwapOrder> {
+  return awaitSwap(await submitSwap(p, opts), opts);
 }
 
 /** Whether the CLI is installed at all, and which version. */

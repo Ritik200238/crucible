@@ -211,6 +211,16 @@ must say `live`, **and** an environment variable must be set in the shell by a
 person. A config file an agent could edit is not on its own enough to move real
 money.
 
+**A write is a lifecycle, not an event.** The order is recorded the instant the
+venue accepts it — `execution.submitted`, with the venue's own id — before any
+attempt to learn what became of it. If the read-back then fails, the result is
+`execution.unconfirmed`, which is a different thing from `execution.failed`: a
+failure means nothing was sent and may be retried; unconfirmed means something
+was sent and must not be. The unconfirmed order's notional is held against every
+cap, and counts as an order for the rate brake, until `reconcile` asks the venue
+again and writes what it said. Not knowing is never treated as knowing it did
+not happen. A slice that filled before a later slice failed is counted too.
+
 ### Stage 6 — the receipt
 
 ```
@@ -240,14 +250,14 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 14 files, ~7,290 lines, **412 tests, all passing** |
+| Tests | 15 files, ~7,638 lines, **424 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
 ### Surfaces
 
-**MCP server** — eight tools an AI agent drives: `quote`, `route`, `execute`,
-`policy`, `evidence`, `verify_ledger`, `calibration`, `status`.
+**MCP server** — nine tools an AI agent drives: `quote`, `route`, `execute`,
+`policy`, `evidence`, `verify_ledger`, `calibration`, `reconcile`, `status`.
 
 The split is deliberate. `quote` prices without deciding. `route` decides and
 returns a fingerprinted plan. `execute` takes **only a plan id** — never order
@@ -280,11 +290,11 @@ repository.
 
 ---
 
-## 6. Fourteen bugs found by attacking it
+## 6. Fifteen bugs found by attacking it
 
 These are listed because they are the most honest thing in this document. **Not
 one of them came from reading the code.** Reviewing found nothing. Trying to
-break it found fourteen, three of which could move real money to the wrong place.
+break it found fifteen, three of which could move real money to the wrong place.
 
 | # | Bug | Why it mattered |
 |---|---|---|
@@ -302,11 +312,12 @@ break it found fourteen, three of which could move real money to the wrong place
 | 12 | The size resolver promised "exactly one" and silently preferred one | A contradictory intent was routed rather than refused |
 | 13 | Gas was priced at the traded pair's price rather than BNB's | Gas is always paid in BNB. On BTC this overstated it 104× and invented sixty basis points of cost |
 | 14 | The wallet fee was looked up by the exchange's asset name, not the chain's | `BTC` found no entry where `BTCB` was the contract, so the lookup missed on exactly the pairs where the fee decides the venue |
+| 15 | A read-back that timed out was recorded as a failure | The order had reached the exchange. Recorded as failed, it vanished from every cap, and a slow network became a way to erase orders from the daily total |
 
 Every one is now covered by a test written from the attacker's side. A rule only
 ever fed the input it was designed to catch has not really been tested.
 
-Eight of them are also re-run as attacks rather than as assertions.
+Nine of them are also re-run as attacks rather than as assertions.
 `demo/attack.ts` drives the real modules, prints what stopped each attempt and
 where, and exits non-zero if any of them starts working again. The split-order
 case reproduces the original bug first — eighty slices through an evaluator with
@@ -398,7 +409,7 @@ npm run cli -- status                                  # what can actually execu
 npm run cli -- policy                                  # what is protecting you
 npm run cli -- samples                                 # the evidence so far
 
-npm test              # 412 tests
+npm test              # 424 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```

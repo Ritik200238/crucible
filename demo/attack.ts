@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Eight ways to get money out of this thing, run against the real code.
+ * Nine ways to get money out of this thing, run against the real code.
  *
  * Every defence here exists because the attack it stops used to work. None of
  * them came from reading the code and imagining what might go wrong: each one
@@ -344,6 +344,43 @@ const attacks: Attack[] = [
       return (
         `the counter moved $${before.toLocaleString()} → $${after.toLocaleString()}, but the ledger ` +
         `no longer verifies: record ${check.brokenAt} was changed after it was written`
+      );
+    },
+  },
+  {
+    goal: "Send an order, cut the read-back, then send it again under the daily cap",
+    why: "A read-back that timed out was recorded as a failure, and an order that had actually reached the exchange vanished from every cap the moment the network was slow.",
+    run: () => {
+      const policy: Policy = { ...DEFAULT_POLICY, maxOrderNotionalUsd: 100_000, maxDailyNotionalUsd: 100_000 };
+      const ledger = tempLedger();
+
+      // The first order left for the exchange and was never read back. This is
+      // the record execute() writes in that case; nothing here is invented.
+      ledger.append("execution.unconfirmed", {
+        planId: "cut-off",
+        fingerprint: "fp-cut-off",
+        symbol: "BNBUSDT",
+        side: "BUY",
+        mid: 727.27,
+        predictedBps: 10,
+        submitted: [{ venue: "BINANCE_SPOT", reference: "5100200", baseQty: 82.5, quoteQty: 60_000 }],
+        confirmedFills: [],
+        reason: "read-back timed out",
+      });
+
+      // Blind to in-flight orders, the second $60,000 is judged against an
+      // empty day and waved through: $120,000 against a $100,000 cap.
+      const blind: EvaluationContext = { ...context(policy, ledger), state: emptyState() };
+      if (evaluate(order({ quoteOrderQty: 60_000 }), blind).verdict === "BLOCK") {
+        return "the blind case did not reproduce; this attack is no longer meaningful";
+      }
+
+      const verdict = evaluate(order({ quoteOrderQty: 60_000 }), context(policy, ledger));
+      if (verdict.verdict !== "BLOCK") return null;
+      const state = deriveState(ledger.read(), Date.now());
+      return (
+        `the unresolved $60,000 is still held (${state.unresolved.length} order in flight), so the second ` +
+        `$60,000 is refused by ${verdict.blockedBy.join(", ")} — the hold only lifts when the venue answers`
       );
     },
   },

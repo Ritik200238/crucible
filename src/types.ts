@@ -445,6 +445,17 @@ export interface RollingState {
   recentOrderTimes: string[];
   lastLossAt: string | null;
   realisedPnlTodayUsd: number;
+  /**
+   * Orders sent to a venue whose outcome has not been established. Each holds
+   * its notional against the caps until a reconciliation resolves it.
+   */
+  unresolved: {
+    planId: string;
+    venue: string;
+    reference: string;
+    quoteQty: number;
+    since: string;
+  }[];
 }
 
 export interface EvaluationContext {

@@ -297,7 +297,7 @@ export class BinanceRest {
         throw new BinanceApiError(
           `Order ${orderId} on ${symbol} is still ${last.status} after ${Math.round(timeoutMs / 1000)}s. ` +
             `It has not failed — it is unresolved, and reporting it either way would be a guess. ` +
-            `Check it with: crucible status --symbol ${symbol} --order ${orderId}`,
+            `Its notional stays held against your caps. Read it back with: crucible reconcile --plan <plan id>`,
         );
       }
       await new Promise((r) => setTimeout(r, pollMs));
