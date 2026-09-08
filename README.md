@@ -143,10 +143,30 @@ the model reads real trade flow from the tape. A larger order is *less* likely t
 fill — the opposite of what a naive queue-ratio model says, and getting it
 backwards is how a tool ends up recommending a post because it is big.
 
-**A modelled route does not beat a measured one by a rounding error.** Posting at
-the touch saves the half spread, which on a liquid pair is a fraction of a basis
-point, while adding the risk of not filling at all. Crucible frequently concludes
-that posting is not worth it, and says so.
+**Adverse selection is measured too, and it changes the answer.** A resting order
+does not fill at random. It fills when somebody chose to trade into it, and that
+somebody is more often right than wrong over the next few seconds — so the fill
+is systematically worse than the price that printed.
+
+Crucible measures it from the tape it already fetches: take every trade where a
+seller crossed into the bid, compare its price against the volume-weighted price
+of everything that traded in the next five seconds, and average over roughly 450
+fills. On BNBUSDT that comes to **0.4 to 0.8 bps**. On ETHUSDT up to **1.7**.
+
+Posting at the touch earns the half spread, which is **0.065 bps**.
+
+So passive execution loses money at VIP 0, where the maker and taker rates are
+identical. The model said the opposite until this was measured and charged.
+
+**A modelled route does not beat a measured one by a rounding error.** Posting is
+priced with the chance of not filling, and the cost of being picked off when it
+does. Crucible routinely concludes that posting is not worth it, and says why.
+
+**Risks with no expected cost are named, not priced.** An on-chain swap settles
+over several blocks and the pool moves in that window; it can also fail on
+slippage and still cost gas. Average drift is zero, so there is no honest number
+to charge — but the exchange route does not carry either risk, and a cheaper
+number that hides one is not cheaper. They are stated next to the price.
 
 **Refusals are recorded.** Every decision, allowed or blocked, is appended to a
 hash-chained ledger and the head is signed. A ledger that only holds successes is
