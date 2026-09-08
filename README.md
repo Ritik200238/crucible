@@ -6,27 +6,44 @@ Crucible decides *where* and *how* — and proves what it cost.
 Built for the [Binance Agent OS Mini Hackathon](https://www.binance.com/en/blog/community/8802181509900814931), Track A.
 
 ```
-  CRUCIBLE  BNBUSDT  snapshot 8be1a4208917a330
-  BUY 0.664000 BNB  ·  $499.33
-  mid 752.00500000   spread 0.13 bps   flow 1.16 BNB/s over 81s
+  CRUCIBLE  BNBUSDT  snapshot 389d3938b3e48d2c
+  BUY 0.663469 BNB  ·  $500.00
+  mid 753.61500000   spread 0.13 bps   flow 0.41 BNB/s over 239s
+  fees: public VIP 0 schedule, not read from an account
 
-  ● on-chain taker                1.56 bps    $0.08
+  ○ Binance spot taker           10.07 bps ~  ± 0.63  $0.50
+      taker fee               10.000   Public VIP 0 taker rate, 0.1000%. Your real rate may be lower.
+      half spread              0.066   Reaching the touch at 753.62000000 from a mid of 753.61500000.
+      book impact              0.000   The whole order fits on the touch, so it moves the book none.
+      effective price      754.37361500
+  ○ Binance spot maker           10.25 bps ~  ± 4.48  $0.51
+      maker fee                9.318   0.1000% maker rate, weighted by a 93% chance of filling.
+      spread earned           -0.062   Resting at 753.61000000 instead of crossing, weighted by fill chance.
+      unfilled fallback        0.686   A 7% chance of missing and having to cross later at 10.07 bps.
+      adverse selection        0.302   Over the last 219 passive fills on this book the market then
+                                       moved against that side by 0.32 bps.
+  ● on-chain taker                0.48 bps    ± 1.00  $0.02
       pool fee                 1.000   The 0.01% tier, chosen because it paid out most at this size.
-      venue divergence         0.364   The pool is trading 0.36 bps worse than the Binance mid right now.
-      price impact             0.079   How far this size pushes the pool past its own mid.
-      gas                      0.115   $0.0057 at 0.050 gwei, spread over $499.33.
-      wallet service fee       0.000   Free: BNB and USDT are both major assets.
-  ○ Binance spot maker            9.94 bps ~  $0.50
-  ○ Binance spot taker           10.07 bps ~  $0.50
-
-  plan 316db15a346e   fingerprint 316db15a346e6466
-  on-chain at 1.56 bps beats Binance spot maker at 9.94 bps, a saving of 8.38 bps.
+      venue divergence        -0.683   The pool is trading 0.68 bps better than the Binance mid right
+                                       now. This is the market, not a saving this product created.
+      price impact             0.049   How far this size pushes the pool past its own mid.
+      gas                      0.115   $0.0057 at 0.050 gwei, spread over $500.00.
+      wallet service fee       0.000   Free: WBNB and USDT are both named in the schedule's first group.
+      effective price      753.65125011
+  ────────────────────────────────────────────────────────────────────────────
+  plan fe53499c5cef   fingerprint fe53499c5cefb250
+  on-chain at 1.27 bps beats Binance spot taker at 10.07 bps, a saving of 8.81 bps.
 
    CLEARED
 ```
 
-That is a real run against live endpoints. Every number in it was measured, not
-assumed.
+Real output against live endpoints, trimmed only where a line wrapped: `quote`
+above the rule, then `route` moments later. The on-chain figure differs between
+them because the pool moved in the seconds between the two commands, which is
+the reason a plan carries a snapshot hash and expires in sixty seconds.
+
+The `±` is the uncertainty the model derives for itself. A maker estimate that
+may or may not fill carries far more of it than a taker order that will.
 
 ## The problem
 
@@ -64,23 +81,23 @@ Measured, not asserted. Regenerate any of it with `npm run evidence`.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 4 | 100% | 1.64 bps | 10.07 bps | 8.43 bps |
-| BNBUSDT | $1,000 | 4 | 100% | 1.69 bps | 10.07 bps | 8.37 bps |
-| BNBUSDT | $10,000 | 4 | 100% | 2.12 bps | 10.25 bps | 7.95 bps |
-| BNBUSDT | $100,000 | 4 | 25% | 14.07 bps | 12.28 bps | -1.75 bps |
-| BTCUSDT | $100 | 4 | 0% | 85.59 bps | 10.00 bps | -75.59 bps |
-| BTCUSDT | $1,000 | 4 | 0% | 53.04 bps | 10.00 bps | -43.11 bps |
-| BTCUSDT | $10,000 | 4 | 0% | 55.64 bps | 10.00 bps | -45.64 bps |
-| BTCUSDT | $100,000 | 4 | 0% | 64.16 bps | 10.00 bps | -53.80 bps |
-| ETHUSDT | $100 | 4 | 100% | 2.73 bps | 9.76 bps | 6.97 bps |
-| ETHUSDT | $1,000 | 4 | 100% | 2.21 bps | 9.76 bps | 7.55 bps |
-| ETHUSDT | $10,000 | 4 | 50% | 10.87 bps | 9.72 bps | -1.15 bps |
-| ETHUSDT | $100,000 | 4 | 0% | 57.71 bps | 10.10 bps | -47.80 bps |
-| XRPUSDT | $100 | 4 | 0% | 82.87 bps | 10.34 bps | -72.54 bps |
-| XRPUSDT | $1,000 | 4 | 0% | 83.00 bps | 10.31 bps | -72.69 bps |
-| XRPUSDT | $10,000 | 4 | 0% | 114.84 bps | 10.33 bps | -104.53 bps |
+| BNBUSDT | $100 | 5 | 100% | 1.52 bps | 10.07 bps | 8.55 bps |
+| BNBUSDT | $1,000 | 5 | 100% | 1.50 bps | 10.07 bps | 8.57 bps |
+| BNBUSDT | $10,000 | 5 | 100% | 2.15 bps | 10.07 bps | 7.91 bps |
+| BNBUSDT | $100,000 | 5 | 20% | 13.73 bps | 11.67 bps | -1.43 bps |
+| BTCUSDT | $100 | 5 | 0% | 51.73 bps | 10.00 bps | -41.73 bps |
+| BTCUSDT | $1,000 | 5 | 0% | 52.81 bps | 10.00 bps | -42.82 bps |
+| BTCUSDT | $10,000 | 5 | 0% | 55.89 bps | 10.00 bps | -45.89 bps |
+| BTCUSDT | $100,000 | 5 | 0% | 64.41 bps | 10.00 bps | -53.91 bps |
+| ETHUSDT | $100 | 5 | 100% | 2.67 bps | 10.02 bps | 7.22 bps |
+| ETHUSDT | $1,000 | 5 | 100% | 2.25 bps | 10.02 bps | 7.33 bps |
+| ETHUSDT | $10,000 | 5 | 40% | 13.62 bps | 10.02 bps | -3.60 bps |
+| ETHUSDT | $100,000 | 5 | 0% | 59.85 bps | 10.03 bps | -49.66 bps |
+| XRPUSDT | $100 | 5 | 0% | 82.31 bps | 10.33 bps | -71.99 bps |
+| XRPUSDT | $1,000 | 5 | 0% | 83.43 bps | 10.28 bps | -73.68 bps |
+| XRPUSDT | $10,000 | 5 | 0% | 114.20 bps | 10.31 bps | -104.36 bps |
 
-Measured across 60 samples spanning 0.4 hours. On-chain was cheaper in 38% of them.
+Measured across 75 samples spanning 0.6 hours. On-chain was cheaper in 37% of them.
 <!-- EVIDENCE:END -->
 
 **The cheaper venue changes with size, and the crossover is different for each
