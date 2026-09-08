@@ -85,10 +85,15 @@ Measured across 60 samples spanning 0.4 hours. On-chain was cheaper in 38% of th
 
 **The cheaper venue changes with size, and the crossover is different for each
 pair.** BNB/USDT stays cheaper on-chain up to about $10,000. ETH/USDT flips ten
-times earlier, because its pool is shallower.
+times earlier, because its pool is shallower. BTC/USDT and XRP/USDT never win
+on-chain at any size sampled: neither BTCB nor XRP is named in the wallet's free
+fee group, so a 50 bps service fee lands on the swap and no pool depth can make
+that back.
 
 That is the entire argument for routing per order rather than picking a venue
-once and living with it.
+once and living with it. A product that had assumed on-chain was cheaper —
+which the first two pairs alone would have supported — would be wrong on half
+the pairs here, and wrong in the direction that costs money.
 
 The gap comes almost entirely from the commission: 10 bps on Binance spot at
 VIP 0 against 1 bps in the deepest BNB/USDT pool, with no wallet fee between two
@@ -109,7 +114,17 @@ npm run cli -- route  --symbol BNBUSDT --usd 50000      # choose one, and gate i
 npm run cli -- route  --symbol BNBUSDT --usd 2000000    # watch the risk engine refuse
 npm run cli -- policy                                    # what is protecting you
 npm run cli -- samples                                   # the evidence so far
+npm run cli -- calibration                               # how wrong the model has been
 ```
+
+Two scripts show the parts a terminal transcript hides:
+
+```bash
+node --experimental-strip-types demo/attack.ts          # eight attacks, run for real
+node --experimental-strip-types demo/agent-session.ts   # the same product, driven over MCP
+```
+
+`demo/attack.ts` exits non-zero if any attack succeeds, and CI runs it.
 
 ## Connect it to an agent
 
@@ -125,6 +140,7 @@ claude mcp add crucible -- node --experimental-strip-types /absolute/path/to/cru
 | `policy` | Which rules are in force |
 | `evidence` | The recorded venue comparison |
 | `verify_ledger` | Recompute the hash chain and check the signature |
+| `calibration` | How wrong the cost model has been against real fills |
 | `status` | Whether each execution path can actually be reached |
 
 `execute` takes **only a plan id**. The plan is the authorisation, so an agent
@@ -211,9 +227,18 @@ has no business being vague about its own error.
 - **Maker cost is an estimate.** It is weighted by a fill probability derived
   from measured flow, and the receipt's predicted-versus-realised error is the
   check on whether that model is any good.
+- **Nothing has been graded yet.** No order has been executed against a real
+  venue, so the cost model has never been checked against a fill. Every figure
+  above is a prediction. `calibration` says so in those words rather than
+  reporting an accuracy it cannot support, and it is the first thing that should
+  be re-read once orders have run.
 - **The evidence span is short.** It shows the shape of the cost curve and where
-  the crossover sits. It does not describe a full market cycle.
-- **Two pairs, deep pools.** A thinner pair would look different.
+  the crossover sits. It does not describe a full market cycle. Rows priced
+  under an earlier cost model are excluded rather than averaged in, which is
+  correct and makes the usable span shorter than the file.
+- **Four pairs.** Two where on-chain wins at small size and two where it never
+  wins. A thinner pair, or one whose pool is on another chain, would look
+  different again.
 - **Fees default to the public VIP 0 schedule** when no account credential is
   present, and every report says so. A real account usually pays less, which
   narrows the gap this product reports.

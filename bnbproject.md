@@ -240,14 +240,14 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 11 files, ~6,200 lines, **339 tests, all passing** |
+| Tests | 12 files, ~6,460 lines, **353 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
 ### Surfaces
 
-**MCP server** — seven tools an AI agent drives: `quote`, `route`, `execute`,
-`policy`, `evidence`, `verify_ledger`, `status`.
+**MCP server** — eight tools an AI agent drives: `quote`, `route`, `execute`,
+`policy`, `evidence`, `verify_ledger`, `calibration`, `status`.
 
 The split is deliberate. `quote` prices without deciding. `route` decides and
 returns a fingerprinted plan. `execute` takes **only a plan id** — never order
@@ -280,11 +280,11 @@ repository.
 
 ---
 
-## 6. Twelve bugs found by attacking it
+## 6. Fourteen bugs found by attacking it
 
 These are listed because they are the most honest thing in this document. **Not
 one of them came from reading the code.** Reviewing found nothing. Trying to
-break it found twelve, three of which could move real money to the wrong place.
+break it found fourteen, three of which could move real money to the wrong place.
 
 | # | Bug | Why it mattered |
 |---|---|---|
@@ -300,9 +300,18 @@ break it found twelve, three of which could move real money to the wrong place.
 | 10 | Fees split across assets picked the largest raw number | 0.9 USDT beat 0.002 BNB, which is worth more. Money vanished from receipts |
 | 11 | The snapshot hash omitted fields the decision reads | The stated reproducibility guarantee was not true |
 | 12 | The size resolver promised "exactly one" and silently preferred one | A contradictory intent was routed rather than refused |
+| 13 | Gas was priced at the traded pair's price rather than BNB's | Gas is always paid in BNB. On BTC this overstated it 104× and invented sixty basis points of cost |
+| 14 | The wallet fee was looked up by the exchange's asset name, not the chain's | `BTC` found no entry where `BTCB` was the contract, so the lookup missed on exactly the pairs where the fee decides the venue |
 
 Every one is now covered by a test written from the attacker's side. A rule only
 ever fed the input it was designed to catch has not really been tested.
+
+Eight of them are also re-run as attacks rather than as assertions.
+`demo/attack.ts` drives the real modules, prints what stopped each attempt and
+where, and exits non-zero if any of them starts working again. The split-order
+case reproduces the original bug first — eighty slices through an evaluator with
+no memory, every one accepted — so the defence is measured against the failure
+instead of being asserted on its own. CI runs it on both platforms.
 
 ---
 
@@ -326,6 +335,25 @@ GET  /api/v3/myTrades
 
 The pipeline is proven. **The venue is not.** That needs exchange API keys and a
 signed-in wallet session, and until it happens this sentence stays here.
+
+### The cost model has never been graded
+
+A direct consequence of the above, and worth stating on its own because it is
+the claim a reader is most likely to assume has been checked. Every execution
+records what was predicted beside what it actually cost, and `calibration` reads
+those back and reports the error — signed, per venue, with the worst single miss
+kept next to the average.
+
+With no executions on the record it returns exactly that:
+
+> No orders have been executed, so the cost model has never been checked against
+> a real fill. Every figure this product reports is a prediction that has not yet
+> been graded.
+
+Fitting a calibration curve to zero samples would have produced something that
+reads as evidence while being the opposite, so it refuses to. The report also
+refuses to describe a tendency below five executions, however consistent they
+look.
 
 ### No hosted endpoint
 
@@ -370,7 +398,7 @@ npm run cli -- status                                  # what can actually execu
 npm run cli -- policy                                  # what is protecting you
 npm run cli -- samples                                 # the evidence so far
 
-npm test              # 339 tests
+npm test              # 353 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```
