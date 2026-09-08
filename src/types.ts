@@ -406,6 +406,17 @@ export interface Policy {
   venueAllowlist?: Venue[];
   /** Refuse when the two independent on-chain quotes disagree by more. */
   maxQuoteDisagreementBps?: number;
+  /**
+   * Refuse a venue whose price is further than this from the exchange mid, in
+   * either direction.
+   *
+   * A price too good is not a bargain, it is a symptom. A stale RPC, a token
+   * whose decimals were assumed wrongly, a thin pool someone has moved, and a
+   * look-alike contract all present as an enormous discount. A discount that
+   * large on a liquid pair would be an arbitrage taken long before this
+   * process saw it.
+   */
+  maxVenueDivergenceBps?: number;
 }
 
 export interface RollingState {

@@ -41,6 +41,7 @@ export const DEFAULT_POLICY: Policy = {
   snapshotMaxAgeMs: 5_000,
   venueAllowlist: ["BINANCE_SPOT", "ONCHAIN"],
   maxQuoteDisagreementBps: 50,
+  maxVenueDivergenceBps: 100,
 };
 
 export class ConfigError extends Error {
@@ -68,6 +69,7 @@ const NUMERIC_FIELDS = [
   "depthWindowBps",
   "snapshotMaxAgeMs",
   "maxQuoteDisagreementBps",
+  "maxVenueDivergenceBps",
 ] as const;
 
 const KNOWN = new Set<string>([

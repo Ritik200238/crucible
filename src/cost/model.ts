@@ -43,7 +43,18 @@ export interface CostInput {
   snapshot: Snapshot;
   side: Side;
   baseQty: number;
+  /** How far a venue may sit from the exchange mid before it is not believed. */
+  maxDivergenceBps?: number;
 }
+
+/**
+ * Default bound on how far a venue may be from the exchange.
+ *
+ * Cross-venue divergence on a liquid pair runs to a few basis points. A hundred
+ * is far past anything normal and still catches every way the price can be
+ * wrong rather than merely unusual.
+ */
+export const DEFAULT_MAX_DIVERGENCE_BPS = 100;
 
 function sum(components: CostComponent[]): number {
   return components.reduce((a, c) => a + c.bps, 0);
@@ -277,6 +288,24 @@ export function costOnchain(input: CostInput): CostEstimate {
   const allInBps = ((effective - s.mid) / s.mid) * BPS * direction;
 
   const poolFeeBps = feeTierBps(best.feeTier);
+
+  // Believability first. Everything below prices a real venue; this asks
+  // whether the number came from one. It is checked in both directions: a price
+  // far worse than the exchange is as much a sign of bad data as a price far
+  // better, and only one of the two would have been caught by simply being
+  // expensive.
+  const divergenceLimit = input.maxDivergenceBps ?? DEFAULT_MAX_DIVERGENCE_BPS;
+  if (Math.abs(allInBps) > divergenceLimit) {
+    return unavailable(
+      "ONCHAIN",
+      "TAKER",
+      `The pool prices this ${Math.abs(allInBps).toFixed(0)} bps ` +
+        `${allInBps < 0 ? "better" : "worse"} than the exchange mid, past the ${divergenceLimit} bps ` +
+        `this venue is believed within. A gap that size on a liquid pair is a stale quote, a wrong ` +
+        `token, or a pool someone has moved — not a price worth taking. Nothing was routed here.`,
+    );
+  }
+
   const serviceRate = walletServiceFeeRate(s.filters.baseAsset, s.filters.quoteAsset);
   const gasBps = (s.onchain.gasCostUsd / notionalUsd) * BPS;
 

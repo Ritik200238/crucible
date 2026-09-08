@@ -7,14 +7,18 @@ import { join } from "node:path";
 import { Ledger } from "../src/ledger/chain.ts";
 import { assertSpendable } from "../src/exec/execute.ts";
 import { deriveState, emptyState } from "../src/risk/state.ts";
+import { priceAllRoutes, DEFAULT_MAX_DIVERGENCE_BPS } from "../src/cost/model.ts";
+import { route } from "../src/decide/router.ts";
 import { evaluate } from "../src/risk/engine.ts";
 import { DEFAULT_POLICY } from "../src/config.ts";
 import type {
   ConfirmedFill,
   EvaluationContext,
+  OrderBook,
   Plan,
   Policy,
   ProposedOrder,
+  Snapshot,
 } from "../src/types.ts";
 
 /**
@@ -409,5 +413,122 @@ describe("replaying an authorisation", () => {
     const ledger = tempLedger();
     ledger.append("execution.started", { planId: "other", fingerprint: "someoneelse" });
     assert.doesNotThrow(() => assertSpendable(plan("deadbeefcafe0004"), ledger));
+  });
+});
+
+describe("a venue price too good to be true", () => {
+  const MID = 752;
+
+  const book = (): OrderBook => ({
+    lastUpdateId: 1,
+    bids: Array.from({ length: 20 }, (_, i) => ({ price: MID - 0.01 * (i + 1), qty: 50 })),
+    asks: Array.from({ length: 20 }, (_, i) => ({ price: MID + 0.01 * (i + 1), qty: 50 })),
+  });
+
+  /** A snapshot whose pool quotes `poolPrice` per base unit. */
+  const withPool = (poolPrice: number): Snapshot => {
+    const amountIn = MID * 10;
+    const tier = {
+      feeTier: 100,
+      amountOut: amountIn / poolPrice,
+      price: 1 / poolPrice,
+      gasEstimate: 100_000,
+    };
+    return {
+      symbol: "BNBUSDT",
+      takenAt: Date.now(),
+      mid: MID,
+      bestBid: MID - 0.01,
+      bestAsk: MID + 0.01,
+      spreadBps: 0.27,
+      book: book(),
+      filters: {
+        symbol: "BNBUSDT",
+        baseAsset: "BNB",
+        quoteAsset: "USDT",
+        baseAssetPrecision: 8,
+        quoteAssetPrecision: 8,
+        stepSize: 0.001,
+        minQty: 0.001,
+        maxQty: 9000,
+        tickSize: 0.01,
+        minNotional: 5,
+      },
+      commission: { maker: 0.001, taker: 0.001, source: "vip0-default" },
+      flow: {
+        hitsBidPerSec: 3,
+        liftsAskPerSec: 3,
+        windowSec: 60,
+        adverseBuyBps: 0.6,
+        adverseSellBps: 0.5,
+        adverseSamples: 400,
+      },
+      onchain: {
+        chainId: 56,
+        tokenIn: "0x",
+        tokenOut: "0x",
+        amountIn,
+        tiers: [tier],
+        best: tier,
+        gasPriceWei: 50_000_000,
+        gasCostUsd: 0.006,
+        referencePrice: 1 / poolPrice,
+        walletQuote: null,
+      },
+      hash: "fixture",
+    };
+  };
+
+  const onchainRoute = (poolPrice: number) =>
+    priceAllRoutes({ snapshot: withPool(poolPrice), side: "BUY", baseQty: 10 }).find(
+      (r) => r.venue === "ONCHAIN",
+    )!;
+
+  test("a plausible pool price is used", () => {
+    assert.equal(onchainRoute(MID).unavailable, undefined);
+  });
+
+  test("a pool quoting 99% below the exchange is refused, not taken", () => {
+    // Before this bound the route priced at −9900 bps and won every time. A
+    // stale RPC, a token whose decimals were read wrongly, and a pool someone
+    // has moved all look exactly like this.
+    const r = onchainRoute(MID * 0.01);
+    assert.ok(r.unavailable, "a 99% discount must not be believed");
+    assert.match(r.unavailable!, /better than the exchange mid/);
+  });
+
+  test("the bound applies to a price far worse as well as far better", () => {
+    // A price far off in the expensive direction is the same broken data. It
+    // would have been discarded for being costly, which is the right outcome
+    // reached by luck rather than by checking.
+    const r = onchainRoute(MID * 1.5);
+    assert.ok(r.unavailable);
+    assert.match(r.unavailable!, /worse than the exchange mid/);
+  });
+
+  test("a refused venue degrades to the other one rather than killing the trade", () => {
+    // Refusing the venue must not refuse the order. The trade still happens,
+    // on the venue whose price can be believed.
+    const plan = route({
+      intent: { symbol: "BNBUSDT", side: "BUY", baseQty: 10 },
+      snapshot: withPool(MID * 0.01),
+      policy: { ...DEFAULT_POLICY, maxDailyNotionalUsd: undefined },
+    });
+    assert.equal(plan.chosen.venue, "BINANCE_SPOT");
+  });
+
+  test("the bound is the operator's to set", () => {
+    const snapshot = withPool(MID * 0.97);
+    const strict = priceAllRoutes({ snapshot, side: "BUY", baseQty: 10, maxDivergenceBps: 10 });
+    const loose = priceAllRoutes({ snapshot, side: "BUY", baseQty: 10, maxDivergenceBps: 5_000 });
+    assert.ok(strict.find((r) => r.venue === "ONCHAIN")!.unavailable);
+    assert.equal(loose.find((r) => r.venue === "ONCHAIN")!.unavailable, undefined);
+  });
+
+  test("the default bound is far past normal cross-venue movement", () => {
+    // Divergence on a liquid pair runs to a few basis points, so the default
+    // has to sit well clear of it or ordinary trading trips the guard.
+    assert.ok(DEFAULT_MAX_DIVERGENCE_BPS >= 50);
+    assert.equal(onchainRoute(MID * 1.001).unavailable, undefined, "10 bps out is normal");
   });
 });

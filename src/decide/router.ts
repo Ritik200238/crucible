@@ -46,6 +46,7 @@ export function hashPolicy(policy: Policy): string {
       policy.snapshotMaxAgeMs ?? null,
       policy.venueAllowlist ?? null,
       policy.maxQuoteDisagreementBps ?? null,
+      policy.maxVenueDivergenceBps ?? null,
       policy.maxOrderNotionalUsd ?? null,
     ]),
   );
@@ -165,7 +166,14 @@ export function route(opts: RouteOptions): Plan {
   const quoteQty = baseQty * snapshot.mid;
 
   const allowed = policy.venueAllowlist;
-  const priced = priceAllRoutes({ snapshot, side, baseQty }).map((r) =>
+  const priced = priceAllRoutes({
+    snapshot,
+    side,
+    baseQty,
+    ...(policy.maxVenueDivergenceBps !== undefined
+      ? { maxDivergenceBps: policy.maxVenueDivergenceBps }
+      : {}),
+  }).map((r) =>
     allowed && !allowed.includes(r.venue)
       ? { ...r, unavailable: `${r.venue} is not in your venue allowlist.` }
       : r,
