@@ -150,6 +150,7 @@ server.registerTool(
         for (const comp of r.components) {
           lines.push(`    ${comp.name}: ${comp.bps.toFixed(3)} bps — ${comp.detail}`);
         }
+        for (const note of r.notes) lines.push(`    note: ${note}`);
       }
       if (usable.length > 1) {
         lines.push(

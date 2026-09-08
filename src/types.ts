@@ -193,6 +193,17 @@ export interface CostEstimate {
   unavailable?: string;
   /** True when any component is modelled. */
   hasEstimates: boolean;
+  /**
+   * Real risks of this route that carry no expected cost, so they are named
+   * rather than priced.
+   *
+   * Some things a route exposes you to have an expected value of zero and a
+   * variance that is not zero — price drift while a swap settles is the obvious
+   * one. Inventing a number for those would be a guess dressed as a measurement,
+   * and leaving them out entirely would let a cheaper-looking route hide a risk
+   * the other one does not carry. So they are stated.
+   */
+  notes: string[];
 }
 
 // ---------------------------------------------------------------------------

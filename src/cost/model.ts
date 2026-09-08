@@ -54,6 +54,7 @@ function finish(
   style: Style,
   components: CostComponent[],
   input: CostInput,
+  notes: string[] = [],
 ): CostEstimate {
   const totalBps = sum(components);
   const notionalUsd = input.baseQty * input.snapshot.mid;
@@ -68,6 +69,7 @@ function finish(
     totalUsd: (totalBps / BPS) * notionalUsd,
     effectivePrice: input.snapshot.mid * (1 + (direction * totalBps) / BPS),
     hasEstimates: components.some((c) => c.estimated),
+    notes,
   };
 }
 
@@ -81,6 +83,7 @@ function unavailable(venue: Venue, style: Style, reason: string): CostEstimate {
     effectivePrice: 0,
     unavailable: reason,
     hasEstimates: false,
+    notes: [],
   };
 }
 
@@ -240,7 +243,10 @@ export function costBinanceMaker(input: CostInput): CostEstimate {
     },
   ];
 
-  return finish("BINANCE_SPOT", "MAKER", components, input);
+  return finish("BINANCE_SPOT", "MAKER", components, input, [
+    "The order may not fill at all. The cost above already weighs that, but the outcome is a coin " +
+      "toss on this book rather than a price you are quoted.",
+  ]);
 }
 
 /**
@@ -339,7 +345,17 @@ export function costOnchain(input: CostInput): CostEstimate {
     },
   );
 
-  return finish("ONCHAIN", "TAKER", components, input);
+  return finish("ONCHAIN", "TAKER", components, input, [
+    "A swap settles over several blocks rather than instantly, and the pool price moves in that " +
+      "window. Average drift is zero, so there is no honest number to charge, but the risk is real " +
+      "and the exchange route does not carry it.",
+    "A swap can fail on slippage or liquidity and still cost gas. A rejected exchange order costs " +
+      "nothing.",
+    s.onchain?.walletQuote
+      ? "Priced against both the pool directly and the wallet's own executable quote, which agreed."
+      : "Priced from the pool directly. The wallet's own executable quote was not available to " +
+        "cross-check, so there is only one source for this price.",
+  ]);
 }
 
 /** Every route, priced. Unavailable routes are kept, with their reason. */

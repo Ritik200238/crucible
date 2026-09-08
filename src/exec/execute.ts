@@ -39,8 +39,15 @@ export interface ExecuteOptions {
   plan: Plan;
   snapshot: Snapshot;
   policy: Policy;
-  /** Required to reach the exchange. Absent means the Binance leg cannot run. */
-  binance?: { baseUrl: string; credentials: Credentials };
+  /**
+   * Required to reach the exchange. Absent means the Binance leg cannot run.
+   *
+   * `fetchImpl` exists so the whole path — validate, place, confirm, receipt —
+   * can be exercised against a simulated venue. Without it the only way to test
+   * execution is to execute, and a pipeline whose sole proof is a live order is
+   * a pipeline nobody dares run.
+   */
+  binance?: { baseUrl: string; credentials: Credentials; fetchImpl?: typeof fetch };
   ledger?: Ledger;
   now?: number;
 }
@@ -79,6 +86,7 @@ async function executeBinance(opts: ExecuteOptions): Promise<ConfirmedFill[]> {
   const client = new BinanceRest({
     baseUrl: opts.binance.baseUrl,
     credentials: opts.binance.credentials,
+    ...(opts.binance.fetchImpl ? { fetchImpl: opts.binance.fetchImpl } : {}),
   });
   await client.syncClock();
 

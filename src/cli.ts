@@ -114,6 +114,11 @@ function printRoute(r: CostEstimate, chosen: boolean, mid: number, quoteAssetPre
     );
   }
   console.log(`      ${c.dim("effective price".padEnd(20))} ${c.dim(r.effectivePrice.toFixed(quoteAssetPrecision).padStart(9))}`);
+  // Risks with no expected cost still belong next to the price, or the cheaper
+  // route quietly looks strictly better than it is.
+  for (const note of r.notes) {
+    console.log(`      ${c.dim("!".padEnd(20))} ${c.dim(note)}`);
+  }
 }
 
 function printPlanHeader(snapshot: Snapshot, side: Side, baseQty: number): void {
