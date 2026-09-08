@@ -369,6 +369,7 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
     // closed, and realised profit is unattributable.
     symbol: snapshot.symbol,
     side: plan.intent.side,
+    venue: plan.chosen.venue,
     fills: receipt.fills,
     predictedBps: receipt.predicted.totalBps,
     realisedBps: receipt.realisedBps,
