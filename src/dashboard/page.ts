@@ -15,7 +15,17 @@
 import { DEFAULT_SIZES } from "../sampler/run.ts";
 
 export function renderPage(): string {
-  return `<title>Crucible</title>
+  // A complete document, not a fragment. Without a doctype a browser falls back
+  // to quirks mode, where the box model and table layout differ enough to move
+  // columns of numbers around — which is the one thing this page exists to keep
+  // aligned.
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Crucible</title>
 <style>
 :root {
   --bg: #0a0c0f;
@@ -110,7 +120,9 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
 .summary { margin: 0 0 10px; }
 .summary strong { font-weight: 600; }
 .kv { display: flex; gap: 6px; flex-wrap: wrap; color: var(--dim); margin: 0 0 10px; }
-.kv span + span::before { content: "·"; color: var(--dimmer); margin-right: 6px; }
+/* Direct children only: the separator belongs between items, not between the
+   number spans inside one of them. */
+.kv > span + span::before { content: "·"; color: var(--dimmer); margin-right: 6px; }
 
 .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 2px 18px; margin-bottom: 12px; }
 .rule { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; }
@@ -127,6 +139,8 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
 .verdict.ok { background: #16301f; color: var(--good); }
 .verdict.no { background: #331a19; color: var(--bad); }
 </style>
+</head>
+<body>
 
 <div class="wrap">
 <header>
@@ -187,7 +201,9 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
   function usdWhole(v) { return "$" + v.toLocaleString("en-US", { maximumFractionDigits: 0 }); }
   function pct(v) { return (v * 100).toFixed(1) + "%"; }
   function count(v) { return v.toLocaleString("en-US"); }
-  function clock(ms) { return new Date(ms).toTimeString().slice(0, 8); }
+  // UTC throughout, because the sample file and the ledger are both written in
+  // it and a mix of zones on one screen is how two times get compared wrongly.
+  function clock(ms) { return new Date(ms).toISOString().slice(11, 19) + " UTC"; }
   function stamp(iso) {
     return String(iso).replace("T", " ").replace(/\\.\\d+Z$/, " UTC").replace(/Z$/, " UTC");
   }
@@ -244,7 +260,7 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
   // Quote
   // -------------------------------------------------------------------------
 
-  function routeCard(route, cheapest) {
+  function routeCard(route, cheapest, precision) {
     var label = venueName(route.venue) + " " + route.style.toLowerCase();
     if (route.unavailable) {
       return '<div class="route off"><div class="route-top"><span class="route-name">' + esc(label) +
@@ -266,23 +282,18 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
       (route.hasEstimates ? '<span class="badge warn">modelled</span>' : "") +
       '<span class="route-total">' + esc(bps(route.totalBps)) + "</span></div>" +
       '<div class="kv"><span>' + esc(usd(route.totalUsd)) + " on this order</span><span>effective price " +
-      esc(route.effectivePrice.toFixed(route.quoteAssetPrecision === undefined ? 4 : route.quoteAssetPrecision)) +
-      "</span></div><table>" + rows + "</table></div>";
+      esc(route.effectivePrice.toFixed(precision)) + "</span></div><table>" + rows + "</table></div>";
   }
 
   function renderQuote(quote) {
-    for (var i = 0; i < quote.routes.length; i++) {
-      quote.routes[i].quoteAssetPrecision = quote.quoteAssetPrecision;
-    }
-
-    var head = '<p class="summary">' + num(esc(quote.symbol)) + " " + esc(quote.side) + " " +
+    var head = '<p class="summary">' + num(quote.symbol) + " " + esc(quote.side) + " " +
       num(quote.baseQty.toFixed(6)) + " " + esc(quote.baseAsset) + " &mdash; " + num(usd(quote.notionalUsd)) +
       " at a mid of " + num(quote.mid.toFixed(quote.quoteAssetPrecision)) + "</p>";
 
     head += '<p class="kv"><span>spread ' + num(bps(quote.spreadBps)) + "</span>" +
       "<span>flow " + num(quote.flowPerSec.toFixed(2)) + " " + esc(quote.baseAsset) + "/s over " +
       num(quote.flowWindowSec.toFixed(0) + " s") + "</span>" +
-      "<span>snapshot " + num(esc(quote.snapshotHash)) + "</span>" +
+      "<span>snapshot " + num(quote.snapshotHash) + "</span>" +
       "<span>taken " + num(clock(quote.takenAt)) + "</span>" +
       "<span>fees " + esc(quote.commission.source === "account"
         ? "read from your account"
@@ -293,7 +304,9 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
     }
 
     var cards = "";
-    for (var j = 0; j < quote.routes.length; j++) cards += routeCard(quote.routes[j], quote.cheapest);
+    for (var j = 0; j < quote.routes.length; j++) {
+      cards += routeCard(quote.routes[j], quote.cheapest, quote.quoteAssetPrecision);
+    }
 
     var verdict = "";
     if (quote.cheapest !== null && quote.edgeBps !== null) {
@@ -552,5 +565,7 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
   loadAll();
 })();
 </script>
+</body>
+</html>
 `;
 }
