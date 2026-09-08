@@ -17,6 +17,7 @@ import { priceAllRoutes } from "./cost/model.ts";
 import { measuredImpactBps, route, RouteError } from "./decide/router.ts";
 import { ConfigError, DEFAULT_POLICY, isLiveEnabled, loadPolicy } from "./config.ts";
 import { BinanceError, fetchMid } from "./venues/binance.ts";
+import { resolveCommission } from "./venues/commission.ts";
 import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
@@ -126,7 +127,13 @@ async function resolveSnapshot(args: Map<string, string>): Promise<{
   let baseQty = qty!;
   if (usd !== undefined) baseQty = usd / (await fetchMid(symbol));
 
-  const snapshot = await takeSnapshot({ symbol, side, baseQty, includeWalletQuote: true });
+  const snapshot = await takeSnapshot({
+    symbol,
+    side,
+    baseQty,
+    includeWalletQuote: true,
+    commission: await resolveCommission(symbol),
+  });
   return { snapshot, side, baseQty, symbol };
 }
 
@@ -175,6 +182,14 @@ function printPlanHeader(snapshot: Snapshot, side: Side, baseQty: number): void 
   );
   if (snapshot.commission.source !== "account") {
     console.log(c.dim(`  fees: public VIP 0 schedule, not read from an account`));
+  } else {
+    console.log(
+      c.dim(
+        `  fees: your account's — maker ${(snapshot.commission.maker * 10_000).toFixed(2)} bps, taker ` +
+          `${(snapshot.commission.taker * 10_000).toFixed(2)} bps, ` +
+          (snapshot.commission.via === "agent-os" ? "read through Binance Agent OS" : "read with your API key"),
+      ),
+    );
   }
   if (snapshot.onchainUnavailable) {
     console.log(c.yellow(`  on-chain unavailable: ${snapshot.onchainUnavailable}`));
@@ -483,6 +498,17 @@ async function cmdStatus(args: Map<string, string>): Promise<number> {
       console.log(`  ${c.yellow("○")} Wallet       ${c.dim(`CLI ${version}, ${(err as Error).message}`)}`);
     }
   }
+
+  // The account's real fee, or why the public schedule is standing in for it.
+  // Commission is the largest cost on the exchange side, so which one is in use
+  // is the first thing to know about any quote this instance produces.
+  const symbol = (args.get("symbol") ?? "BNBUSDT").toUpperCase();
+  const fees = await resolveCommission(symbol);
+  console.log(
+    fees.source === "account"
+      ? `  ${c.green("●")} Fees         ${symbol} maker ${(fees.maker * 10_000).toFixed(2)} bps, taker ${(fees.taker * 10_000).toFixed(2)} bps — ${fees.detail ?? "read from your account"}`
+      : `  ${c.yellow("○")} Fees         ${c.dim(`public VIP 0 schedule for ${symbol}. ${fees.detail?.replace(/^Public VIP 0 schedule\. /, "") ?? ""}`)}`,
+  );
 
   const ledger = verifyLedger();
   console.log(

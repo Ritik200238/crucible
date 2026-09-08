@@ -298,7 +298,7 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
       "<span>snapshot " + num(quote.snapshotHash) + "</span>" +
       "<span>taken " + num(clock(quote.takenAt)) + "</span>" +
       "<span>fees " + esc(quote.commission.source === "account"
-        ? "read from your account"
+        ? (quote.commission.via === "agent-os" ? "your account's, via Binance Agent OS" : "your account's, via API key")
         : "public VIP 0 schedule, not your account's") + "</span></p>";
 
     if (quote.onchainUnavailable) {

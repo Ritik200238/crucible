@@ -22,6 +22,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SnapshotError, takeSnapshot } from "../snapshot.ts";
+import { resolveCommission } from "../venues/commission.ts";
 import { priceAllRoutes } from "../cost/model.ts";
 import { ConfigError, isLiveEnabled, loadPolicy } from "../config.ts";
 import { ALL_RULES } from "../risk/rules.ts";
@@ -165,7 +166,7 @@ async function priceQuote(symbol: string, side: Side, usd: number): Promise<Quot
   const probe = await takeSnapshot({ symbol, side, baseQty: 1, skipOnchain: true });
   const baseQty = usd / probe.mid;
 
-  const snapshot = await takeSnapshot({ symbol, side, baseQty });
+  const snapshot = await takeSnapshot({ symbol, side, baseQty, commission: await resolveCommission(symbol) });
   const priced = priceAllRoutes({ snapshot, side, baseQty });
 
   const routes: QuoteRoute[] = priced.map((r) =>

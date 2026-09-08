@@ -186,6 +186,30 @@ an unconfirmed order must not be. Its notional stays held against every cap
 until `reconcile` asks the venue and gets an answer. Not knowing is never
 treated as knowing it did not happen.
 
+## Read your real fees through Agent OS
+
+Commission is ten of the eleven basis points on a typical exchange-side quote,
+and it decides the venue on its own. Without a credential Crucible prices at the
+public VIP 0 schedule and says so on every report. Most accounts pay less.
+
+Binance Agent OS is the way to fix that without putting an API key on this
+machine. Authorise the exchange's own MCP server once from your client:
+
+```bash
+claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+# then open /mcp, select binance-mcp-server, and authenticate on Binance's consent screen
+```
+
+From then on every quote, route and dashboard figure is priced at **your
+account's rate for that symbol**, read through the session your client
+established — `account/commission`, the same figure the exchange charges you.
+`status` shows which source is in use and, when it is the fallback, exactly why.
+A server or CI can supply the session as `BINANCE_MCP_TOKEN`; an API key in the
+environment is the second source; the public schedule is the last, and is never
+presented as anything else.
+
+The session is read-only here. Orders still go out on the signed execution path.
+
 ## How it is built
 
 **One snapshot, then pure functions.** Both venues are fetched concurrently and

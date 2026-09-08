@@ -122,6 +122,28 @@ empty side, a price that is not a number, or levels out of price order are all
 refused — each of them still walks and still returns a plausible-looking cost,
 which is worse than failing.
 
+### Where the commission rate comes from
+
+Commission is the largest single component on the exchange side. Three sources,
+tried in order, and every quote says which one it used:
+
+1. **Binance Agent OS.** The exchange's own MCP server, authorised once by the
+   user from their own client. Crucible finds that session — from Claude Code's
+   credential store, or `BINANCE_MCP_TOKEN` — and asks it for
+   `account/commission` on the symbol. No API key on this machine. The session
+   is used to read; orders still go out on the signed execution path.
+2. **An API key in the environment**, through the signed REST endpoint for the
+   same figure.
+3. **The public VIP 0 schedule**, labelled as such on every report, with the
+   reason the real rate was not available.
+
+The Agent OS client speaks the documented transport. The server's hidden-tool
+mechanism (`tool_execute`) is written from observation, not from a session on
+this machine, and is marked NOT VERIFIED in the source. If any of it is wrong
+the result is a labelled fallback, never a wrong number presented as the
+account's — which the tests pin by breaking the decoder, the auth header and
+the cache in turn.
+
 ### Stage 2 — the cost model
 
 Three routes priced on one comparable axis:
@@ -250,7 +272,7 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 15 files, ~7,638 lines, **424 tests, all passing** |
+| Tests | 16 files, ~7,945 lines, **444 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
@@ -409,7 +431,7 @@ npm run cli -- status                                  # what can actually execu
 npm run cli -- policy                                  # what is protecting you
 npm run cli -- samples                                 # the evidence so far
 
-npm test              # 424 tests
+npm test              # 444 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```

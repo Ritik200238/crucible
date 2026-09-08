@@ -34,6 +34,7 @@ import { credentialsFromEnv, DEMO, MAINNET, type Credentials } from "../exec/bin
 import { execute, ExecutionError, reconcile } from "../exec/execute.ts";
 import { walletStatus, walletVersion } from "../exec/wallet.ts";
 import { BinanceError, fetchMid } from "../venues/binance.ts";
+import { resolveCommission } from "../venues/commission.ts";
 import { OnchainError } from "../venues/onchain.ts";
 import { SnapshotError } from "../snapshot.ts";
 import type { Plan, RollingState, Side, Snapshot } from "../types.ts";
@@ -131,6 +132,7 @@ async function snapshotFor(args: {
     side: args.side,
     baseQty,
     includeWalletQuote: true,
+    commission: await resolveCommission(args.symbol),
   });
   return { snapshot, baseQty };
 }
@@ -177,7 +179,12 @@ server.registerTool(
         );
       }
       if (snapshot.commission.source !== "account") {
-        lines.push("Fees are the public VIP 0 schedule, not read from an account.");
+        lines.push(
+          "Fees are the public VIP 0 schedule, not read from an account. " +
+            (snapshot.commission.detail?.replace(/^Public VIP 0 schedule\. /, "") ?? ""),
+        );
+      } else {
+        lines.push(`Fees: ${snapshot.commission.detail ?? "read from your account"}`);
       }
       return text(lines.join("\n"));
     } catch (err) {

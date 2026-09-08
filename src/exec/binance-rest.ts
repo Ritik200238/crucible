@@ -249,6 +249,42 @@ export class BinanceRest {
   }
 
   /**
+   * The account's commission rates for one symbol.
+   *
+   * `GET /api/v3/account/commission`, weight 20. Preferred over the rates on
+   * `/api/v3/account` because these are per symbol and carry the BNB discount
+   * flags, which is the figure the cost model actually needs.
+   */
+  async accountCommission(symbol: string): Promise<{
+    symbol: string;
+    maker: number;
+    taker: number;
+    discount: { enabled: boolean; rate: number } | null;
+  }> {
+    const raw = await this.request<{
+      symbol: string;
+      standardCommission: { maker: string; taker: string };
+      discount?: { enabledForAccount: boolean; enabledForSymbol: boolean; discount: string };
+    }>("GET", "/api/v3/account/commission", { symbol: symbol.toUpperCase() }, true);
+
+    const maker = Number(raw.standardCommission?.maker);
+    const taker = Number(raw.standardCommission?.taker);
+    if (!Number.isFinite(maker) || !Number.isFinite(taker)) {
+      throw new BinanceApiError(
+        `The commission reply for ${symbol} did not carry numeric maker/taker rates: ${JSON.stringify(raw).slice(0, 200)}`,
+      );
+    }
+    return {
+      symbol: raw.symbol,
+      maker,
+      taker,
+      discount: raw.discount
+        ? { enabled: raw.discount.enabledForAccount && raw.discount.enabledForSymbol, rate: Number(raw.discount.discount) || 0 }
+        : null,
+    };
+  }
+
+  /**
    * Ask Binance whether it would accept this order, without placing it.
    *
    * Weight 1, and it applies the real filters. Running this first turns a whole

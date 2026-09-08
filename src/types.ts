@@ -73,7 +73,12 @@ export interface SymbolFilters {
 export interface CommissionRates {
   maker: number;
   taker: number;
+  /** The account's real rate, or the public schedule standing in for it. */
   source: "account" | "vip0-default";
+  /** How a real rate was obtained. Absent for the public schedule. */
+  via?: "agent-os" | "api-key";
+  /** Where the figure came from, or why the fallback is in use. For the status screen. */
+  detail?: string;
 }
 
 /** A price from the on-chain pool, per fee tier. */
