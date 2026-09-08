@@ -18,6 +18,7 @@ import { measuredImpactBps, route, RouteError } from "./decide/router.ts";
 import { ConfigError, DEFAULT_POLICY, isLiveEnabled, loadPolicy } from "./config.ts";
 import { BinanceError, fetchMid } from "./venues/binance.ts";
 import { resolveCommission } from "./venues/commission.ts";
+import { fetchAccountEquity } from "./venues/account.ts";
 import { OnchainError } from "./venues/onchain.ts";
 import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
@@ -136,6 +137,36 @@ async function resolveSnapshot(args: Map<string, string>): Promise<{
     commission: await resolveCommission(symbol),
   });
   return { snapshot, side, baseQty, symbol };
+}
+
+/**
+ * Where the equity behind the caps comes from.
+ *
+ * An operator's explicit figure is honoured as given. Otherwise the real spot
+ * account is read through Agent OS; a session that answers with a real balance
+ * makes the caps mean the account. With no session, or an unreadable one, the
+ * simulated default stands in and is labelled so.
+ */
+async function resolveEquity(
+  override: number | undefined,
+): Promise<{ equityUsd: number; source: "live" | "simulated"; note: string }> {
+  if (override !== undefined) return { equityUsd: override, source: "simulated", note: "set with --equity" };
+  try {
+    const account = await fetchAccountEquity();
+    if (account && account.equityUsd > 0) {
+      return { equityUsd: account.equityUsd, source: "live", note: "read from your account through Agent OS" };
+    }
+    if (account) {
+      // The account was read and is empty. That is a real fact, not a failure —
+      // the Agentic sub-account starts unfunded — but caps cannot run on $0, so
+      // the simulated figure stands in and says why.
+      return { equityUsd: 100_000, source: "simulated", note: "your Agent OS account read as empty; using a simulated $100,000" };
+    }
+  } catch {
+    // A session that exists but cannot be trusted falls back rather than
+    // driving the caps off a number it could not verify.
+  }
+  return { equityUsd: 100_000, source: "simulated", note: "no account read; using a simulated $100,000" };
 }
 
 function printRoute(r: CostEstimate, chosen: boolean, mid: number, quoteAssetPrecision: number): void {
@@ -334,6 +365,11 @@ async function cmdRoute(args: Map<string, string>): Promise<number> {
     policy,
   });
 
+  // Equity backs the concentration and loss caps. An explicit --equity wins;
+  // otherwise the real account is read through Agent OS, and only if that has
+  // no session does the simulated default stand in.
+  const equity = await resolveEquity(numArg(args, "equity"));
+
   // The risk engine sees the routed order, so venue-aware rules can act on it.
   const decision = evaluate(
     {
@@ -347,10 +383,10 @@ async function cmdRoute(args: Map<string, string>): Promise<number> {
     {
       policy,
       account: {
-        equityUsd: numArg(args, "equity") ?? 100_000,
+        equityUsd: equity.equityUsd,
         positions: [],
         realisedPnlTodayUsd: 0,
-        source: "simulated",
+        source: equity.source,
       },
       state: rollingState(),
       markPrice: snapshot.mid,
@@ -522,6 +558,14 @@ async function cmdStatus(args: Map<string, string>): Promise<number> {
       : ledger.ok
         ? `  ${c.green("●")} Ledger       ${ledger.records} records, chain verified${ledger.signatureValid ? ", signature valid" : ""}`
         : `  ${c.red("✗")} Ledger       ${c.red(`broken at record ${ledger.brokenAt}: ${ledger.reason}`)}`,
+  );
+
+  // Whether the caps run on the real account or a simulated figure.
+  const eq = await resolveEquity(undefined);
+  console.log(
+    eq.source === "live"
+      ? `  ${c.green("●")} Equity       $${eq.equityUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })} ${c.dim(eq.note)} — backs the concentration and loss caps`
+      : `  ${c.dim("○")} Equity       ${c.dim(`simulated $100,000 (${eq.note}) — the concentration and loss caps use this`)}`,
   );
 
   const live = isLiveEnabled(policy);

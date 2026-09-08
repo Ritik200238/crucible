@@ -38,6 +38,7 @@ import { execute, ExecutionError, reconcile } from "../exec/execute.ts";
 import { walletStatus, walletVersion } from "../exec/wallet.ts";
 import { BinanceError, fetchMid } from "../venues/binance.ts";
 import { resolveCommission } from "../venues/commission.ts";
+import { fetchAccountEquity } from "../venues/account.ts";
 import { OnchainError } from "../venues/onchain.ts";
 import { SnapshotError } from "../snapshot.ts";
 import type { Plan, RollingState, Side, Snapshot } from "../types.ts";
@@ -53,6 +54,18 @@ const CONFIG_PATH = process.env.CRUCIBLE_CONFIG;
  * server does not accumulate them.
  */
 const plans = new Map<string, { plan: Plan; snapshot: Snapshot }>();
+
+async function resolveEquity(override: number | undefined): Promise<{ equityUsd: number; positions: never[]; realisedPnlTodayUsd: number; source: "live" | "simulated" }> {
+  const base = { positions: [] as never[], realisedPnlTodayUsd: 0 };
+  if (override !== undefined) return { ...base, equityUsd: override, source: "simulated" };
+  try {
+    const account = await fetchAccountEquity();
+    if (account && account.equityUsd > 0) return { ...base, equityUsd: account.equityUsd, source: "live" };
+  } catch {
+    // fall through to the simulated default
+  }
+  return { ...base, equityUsd: 100_000, source: "simulated" };
+}
 
 function rememberPlan(plan: Plan, snapshot: Snapshot): void {
   for (const [id, held] of plans) {
@@ -260,12 +273,7 @@ export function buildServer(opts: BuildOptions): McpServer {
           },
           {
             policy,
-            account: {
-              equityUsd: a.equityUsd ?? 100_000,
-              positions: [],
-              realisedPnlTodayUsd: 0,
-              source: "simulated",
-            },
+            account: await resolveEquity(a.equityUsd),
             state: rollingState(),
             markPrice: snapshot.mid,
             now: new Date(),

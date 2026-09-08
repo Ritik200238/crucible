@@ -286,7 +286,7 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 18 files, ~8,526 lines, **489 tests, all passing** |
+| Tests | 19 files, ~8,675 lines, **500 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
@@ -494,7 +494,7 @@ node --experimental-strip-types src/cli.ts status                               
 node --experimental-strip-types src/cli.ts policy                                  # what is protecting you
 node --experimental-strip-types src/cli.ts samples                                 # the evidence so far
 
-npm test              # 489 tests
+npm test              # 500 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```

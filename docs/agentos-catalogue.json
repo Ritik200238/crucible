@@ -1,0 +1,1345 @@
+{
+  "provenance": {
+    "capturedAt": "2026-09-08T23:23:22.951Z",
+    "source": "first-party: this repository's own authorised Binance Agent OS session",
+    "endpoint": "https://agent.binance.com/mcp/agentic",
+    "method": "tools/list plus tool_search across every category",
+    "note": "The effect classification is by verb and is deliberately fail-closed: a tool whose verb is not clearly a read is marked a write, so an unrecognised tool is never treated as harmless."
+  },
+  "counts": {
+    "total": 221,
+    "listed": 50,
+    "categoriesAnswered": 15,
+    "read": 114,
+    "write": 105,
+    "meta": 2
+  },
+  "tools": [
+    {
+      "name": "analysis.getTokenAiReport",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "convert.acceptQuote",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "convert.cancelLimitOrder",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "convert.getConvertTradeHistory",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "convert.listAllConvertPairs",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "convert.orderStatus",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "convert.placeLimitOrder",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "convert.queryLimitOpenOrders",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "convert.queryOrderQuantityPrecisionPerAsset",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "convert.sendQuoteRequest",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.accountInformation",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.accountTradeList",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.allOrders",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.basis",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.checkServerTime",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.compressedAggregateTradesList",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.continuousContractKlineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.currentAllOpenOrders",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.exchangeInformation",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.futuresAccountBalance",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.getCurrentPositionMode",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getDownloadIdForFuturesOrderHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getDownloadIdForFuturesTradeHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getDownloadIdForFuturesTransactionHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getFundingRateHistoryOfPerpetualFutures",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getFundingRateInfo",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getFuturesOrderHistoryDownloadLinkById",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getFuturesTradeDownloadLinkById",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getFuturesTransactionHistoryDownloadLinkById",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getIncomeHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getOrderModifyHistory",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.getPositionMarginChangeHistory",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.indexPriceAndMarkPrice",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.indexPriceKlineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.klineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.longShortRatio",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.markPriceKlineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.notionalBracketForPair",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.notionalBracketForSymbol",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.oldTradesLookup",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.openInterest",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.openInterestStatistics",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.orderBook",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.positionAdlQuantileEstimation",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.positionInformation",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.premiumIndexKlineData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.queryCurrentOpenOrder",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.queryIndexPriceConstituents",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.queryOrder",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.recentTradesList",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.symbolOrderBookTicker",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.symbolPriceTicker",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.takerBuySellVolume",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.testConnectivity",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.ticker24hrPriceChangeStatistics",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_coin.topTraderLongShortRatioAccounts",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.topTraderLongShortRatioPositions",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.userCommissionRate",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_coin.usersForceOrders",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.accountInformationV2",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.accountInformationV3",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.accountTradeList",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.adlRisk",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.allOrders",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.assetIndex",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.basis",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.checkServerTime",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.classicPortfolioMarginAccountInformation",
+      "category": "portfolio-margin-endpoints",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.compositeIndexSymbolInformation",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.compressedAggregateTradesList",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.continuousContractKlineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.currentAllAlgoOpenOrders",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.currentAllOpenOrders",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.exchangeInformation",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.futuresAccountBalanceV2",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.futuresAccountBalanceV3",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.futuresAccountConfiguration",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.futuresTradingQuantitativeRulesIndicators",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.getBnbBurnStatus",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getCurrentMultiAssetsMode",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getCurrentPositionMode",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getDownloadIdForFuturesOrderHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getDownloadIdForFuturesTradeHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getDownloadIdForFuturesTransactionHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getFundingRateHistory",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getFundingRateInfo",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getFuturesOrderHistoryDownloadLinkById",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getFuturesTradeDownloadLinkById",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getFuturesTransactionHistoryDownloadLinkById",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getIncomeHistory",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getOrderModifyHistory",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.getPositionMarginChangeHistory",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.indexPriceKlineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.klineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.listAllConvertPairs",
+      "category": "convert",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.longShortRatio",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.markPrice",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.markPriceKlineCandlestickData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.notionalAndLeverageBrackets",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.oldTradesLookup",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.openInterest",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.openInterestStatistics",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.orderBook",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.orderStatus",
+      "category": "convert",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.positionAdlQuantileEstimation",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.positionInformationV2",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.positionInformationV3",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.premiumIndexKlineData",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.quarterlyContractSettlementPrice",
+      "category": "market-data",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.queryAlgoOrder",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.queryAllAlgoOrders",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.queryCurrentOpenOrder",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.queryIndexPriceConstituents",
+      "category": "market-data",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.queryOrder",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.queryUserRateLimit",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "futures_usds.symbolConfiguration",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.symbolPriceTicker",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.userCommissionRate",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "futures_usds.usersForceOrders",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.adjustCrossMarginMaxLeverage",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.createSpecialKey",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.crossMarginCollateralRatio",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "margin.deleteSpecialKey",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.disableIsolatedMarginAccount",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.editIpForSpecialKey",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.enableIsolatedMarginAccount",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.exitSpecialKeyMode",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.getAllIsolatedMarginSymbol",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getAllMarginAssets",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getBnbBurnStatus",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getCrossMarginTransferHistory",
+      "category": "transfer",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getForceLiquidationRecord",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getFutureHourlyInterestRate",
+      "category": "borrow-repay",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getInterestHistory",
+      "category": "borrow-repay",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getSmallLiabilityExchangeCoinList",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getSmallLiabilityExchangeHistory",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.getSummaryOfMarginAccount",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.liquidationLoanRepay",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountBorrowRepay",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountCancelAllOpenOrdersOnASymbol",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountCancelOco",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountCancelOrder",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountNewOco",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountNewOrder",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountNewOto",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginAccountNewOtoco",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.marginManualLiquidation",
+      "category": "trade",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "margin.queryBorrowRepayRecordsInMarginAccount",
+      "category": "borrow-repay",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryCrossIsolatedMarginCapitalFlow",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryCrossMarginAccountDetails",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryCrossMarginFeeData",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryCurrentMarginOrderCountUsage",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryEnabledIsolatedMarginAccountLimit",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryIsolatedMarginAccountInfo",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryIsolatedMarginFeeData",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryLiquidationLoan",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryLiquidationLoanRepayHistory",
+      "category": "trade",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryMarginAccountsAllOrders",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryMarginAccountsOpenOrders",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryMarginAccountsOrder",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryMarginAccountsTradeList",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryMarginInterestRateHistory",
+      "category": "borrow-repay",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryMaxBorrow",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "read"
+    },
+    {
+      "name": "margin.queryMaxTransferOutAmount",
+      "category": "transfer",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.accountCommission",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.aggTrades",
+      "category": "market",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.allOrderList",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.allOrders",
+      "category": "account",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.avgPrice",
+      "category": "market",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.deleteOpenOrders",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "write"
+    },
+    {
+      "name": "spot.depth",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.exchangeInfo",
+      "category": "general",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.executionRules",
+      "category": "general",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.getAccount",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.getOpenOrders",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.getOrder",
+      "category": "account",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.getTrades",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.historicalBlockTrades",
+      "category": "market",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.historicalTrades",
+      "category": "market",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.klines",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.ping",
+      "category": "general",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.referencePrice",
+      "category": "market",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.referencePriceCalculation",
+      "category": "market",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.ticker",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.ticker24hr",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.tickerBookTicker",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.tickerPrice",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.tickerTradingDay",
+      "category": "market",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "spot.time",
+      "category": "general",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "spot.uiKlines",
+      "category": "market",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "sub_account.getMainAccountAsset",
+      "category": "asset-management",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "tool_execute",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "meta"
+    },
+    {
+      "name": "tool_search",
+      "category": "(tools/list)",
+      "listed": true,
+      "effect": "meta"
+    },
+    {
+      "name": "wallet.allCoinsInformation",
+      "category": "capital",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.assetDetail",
+      "category": "asset",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.assetDividendRecord",
+      "category": "asset",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.checkQuestionnaireRequirements",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.depositAddress",
+      "category": "capital",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.depositHistory",
+      "category": "capital",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.depositHistoryTravelRule",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.depositHistoryV2",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.dustlog",
+      "category": "asset",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.fetchAddressVerificationList",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.fetchDepositAddressListWithNetwork",
+      "category": "capital",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.fetchWithdrawAddressList",
+      "category": "capital",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.fetchWithdrawQuota",
+      "category": "capital",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.getCloudMiningPaymentAndRefundHistory",
+      "category": "asset",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.getCountryList",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.getOpenSymbolList",
+      "category": "asset",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.getRegionList",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.getSymbolsDelistScheduleForSpot",
+      "category": "others",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.queryUserDelegationHistory",
+      "category": "asset",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.queryUserUniversalTransferHistory",
+      "category": "asset",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.queryUserWalletBalance",
+      "category": "asset",
+      "listed": false,
+      "effect": "read"
+    },
+    {
+      "name": "wallet.systemStatus",
+      "category": "others",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.tradeFee",
+      "category": "asset",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.userUniversalTransfer",
+      "category": "asset",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.vaspList",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.withdrawHistory",
+      "category": "capital",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.withdrawHistoryV1",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "write"
+    },
+    {
+      "name": "wallet.withdrawHistoryV2",
+      "category": "travel-rule",
+      "listed": false,
+      "effect": "write"
+    }
+  ]
+}
