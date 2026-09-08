@@ -227,10 +227,21 @@ a marketing document.
 npm test
 ```
 
-The ledger was mutation-tested against seven ways of breaking it and caught all
-seven; the risk engine against seven more. Concurrent appends were checked for
-real: four processes writing at once keep the chain intact, and removing the lock
-breaks it at record five — so the lock is load-bearing, not decoration.
+412 tests, no network required — every one builds its fixtures inline or injects
+a fake transport, so a green run means the code is good rather than that the
+exchange was up.
+
+Tests are checked the same way the product is: by breaking the thing they cover
+and confirming they notice. The ledger was mutation-tested against seven ways of
+breaking it and caught all seven; the risk engine against seven more; the venue
+layer against six, including flipping the sign on adverse selection and dropping
+the decimals scaling on the on-chain quoter. Reversing the wallet swap's
+direction fails four tests, and giving `execute` an order field alongside its
+plan id fails the test that exists to stop exactly that.
+
+Concurrent appends were checked for real: four processes writing at once keep the
+chain intact, and removing the lock breaks it at record five — so the lock is
+load-bearing, not decoration.
 
 ## Honest limits
 
