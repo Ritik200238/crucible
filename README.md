@@ -341,16 +341,19 @@ has no business being vague about its own error.
 - **Maker cost is an estimate.** It is weighted by a fill probability derived
   from measured flow, and the receipt's predicted-versus-realised error is the
   check on whether that model is any good.
-- **One execution, not a track record.** The pipeline has run against a real
-  exchange — Binance Demo Mode, order 7070626547, 0.013 BNB read back and
-  receipted — and that single fill is what `calibration` has to work with. One
-  sample cannot establish that the model predicts well, and the report says so
-  in those words. It did settle one thing: the fill's commission proved how the
-  BNB discount field reads, and the model now predicts what that trade actually
-  cost. Everything else above is still a prediction.
+- **Fourteen real fills, and they only test part of the model.** Every order was
+  routed, gated, sent to Binance, read back and receipted. Since the commission
+  reading was corrected, thirteen fills have a mean error of **+0.09 bps** and
+  twelve of them are exact. That is a weaker result than it looks: these were
+  small orders on a deep book, where impact is zero and the estimate is almost
+  entirely the commission — a figure now read from the account rather than
+  guessed. The impact and maker terms have never been graded, because no order
+  large enough to move the book has been executed. The one miss, +1.18 bps, was
+  the price moving between the quote and the fill, which is what the `±` is for.
 - **Demo Mode, not mainnet.** Demo Mode is the real matching engine on a
   practice account. No order has been sent to the live exchange, and no
-  on-chain swap has been executed at all — that needs a signed-in wallet.
+  on-chain swap has been executed at all — that needs a signed-in wallet, so
+  the entire on-chain half of the router is unproven in execution.
 - **The evidence span is short.** It shows the shape of the cost curve and where
   the crossover sits. It does not describe a full market cycle. Rows priced
   under an earlier cost model are excluded rather than averaged in, which is

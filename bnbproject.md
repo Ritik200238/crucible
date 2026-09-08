@@ -390,19 +390,31 @@ Stated plainly.
 
 ### Real executions, on Demo Mode
 
-The exchange path has run for real. On 2026-09-08 Crucible routed a $10 buy of
-BNB, cleared it through the policy, sent it to Binance Demo Mode, and read the
-fill back: order **7070626547**, 0.013 BNB at 748.09, commission 0.00000975 BNB.
-The receipt compared 10.07 bps predicted against 7.57 bps realised, and that
-2.5 bps error is what proved how the BNB discount field reads — the model now
-predicts 7.57.
+The exchange path has run for real, fourteen times. The first was order
+**7070626547** on 2026-09-08: a $10 buy of BNB, routed, gated, sent to Binance
+Demo Mode, and read back — 0.013 BNB at 748.09, commission 0.00000975 BNB. Its
+receipt compared 10.07 bps predicted against 7.57 bps realised, and that 2.5 bps
+gap is what proved how the BNB discount field reads.
 
-That is one fill. It proves the path end to end and it establishes nothing
-about the model's accuracy, which `calibration` says in those words. It was on
-Demo Mode, which is the real matching engine on a practice account; nothing has
-been sent to the live exchange. **The on-chain leg has still never executed** —
-that needs a signed-in Agentic Wallet session, and until it happens this
-sentence stays here.
+Then a sweep of ten more, buying and selling at $10, $20, $35, $60 and $100.
+Since the commission reading was corrected, thirteen fills have a mean error of
+**+0.09 bps**, a median of **0.00**, and twelve of the thirteen are exact.
+
+**That result is weaker than it looks, and the reason matters.** These were
+small orders on a deep book: impact was zero, nothing rested, and the estimate
+was almost entirely commission — which is now read from the account rather than
+guessed, so getting it right is arithmetic rather than modelling. The parts of
+the model that could actually be wrong — book impact at size, the maker fill
+probability, adverse selection — have never been graded, because no order large
+enough to move the book has been executed. The single miss, +1.18 bps on a $20
+buy, was the price moving between the quote and the fill; that is what the
+uncertainty bar exists to describe, not a modelling error.
+
+It was Demo Mode throughout, which is the real matching engine on a practice
+account; nothing has been sent to the live exchange. **The on-chain leg has
+still never executed** — that needs a signed-in Agentic Wallet session, so the
+entire on-chain half of the router is unproven in execution, and until that
+changes this sentence stays here.
 
 The pipeline is also proven against a simulated venue in the suite, with the
 call sequence asserted exactly:
