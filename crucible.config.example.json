@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "mode": "dry-run",
+
+  "venueAllowlist": ["BINANCE_SPOT", "ONCHAIN"],
+  "symbolAllowlist": ["BNBUSDT", "ETHUSDT"],
+  "allowedMarkets": ["SPOT"],
+
+  "maxOrderNotionalUsd": 25000,
+  "maxDailyNotionalUsd": 100000,
+  "maxPositionPctOfEquity": 25,
+  "confirmAboveNotionalUsd": 5000,
+
+  "dailyLossLimitPct": 2,
+  "cooldownAfterLossMinutes": 30,
+  "maxOrdersPerHour": 20,
+
+  "maxImpactBps": 25,
+  "maxSlippageBps": 50,
+  "minDepthNotionalUsd": 10000,
+  "depthWindowBps": 50,
+  "snapshotMaxAgeMs": 5000,
+  "maxQuoteDisagreementBps": 50
+}
