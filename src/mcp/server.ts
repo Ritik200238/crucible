@@ -27,6 +27,7 @@ import { ConfigError, isLiveEnabled, loadPolicy } from "../config.ts";
 import { Ledger } from "../ledger/chain.ts";
 import { deriveState, emptyState } from "../risk/state.ts";
 import { verifyLedger } from "../ledger/verify.ts";
+import { calibration } from "../exec/calibration.ts";
 import { isSample, readSamples } from "../sampler/run.ts";
 import { summarise } from "../sampler/analyse.ts";
 import { credentialsFromEnv, DEMO, MAINNET } from "../exec/binance-rest.ts";
@@ -446,6 +447,38 @@ server.registerTool(
       r.ok
         ? `Ledger intact: ${r.records} records, chain verified, signature ${r.signatureValid ? "valid" : "not checked"}.`
         : `Ledger FAILED verification at record ${r.brokenAt}: ${r.reason}`,
+    );
+  },
+);
+
+server.registerTool(
+  "calibration",
+  {
+    title: "How well the cost model has predicted real fills",
+    description:
+      "Compare what was predicted against what every executed order actually cost. Use it before " +
+      "presenting a cost estimate as reliable: with no executions the model has never been graded, " +
+      "and you should say so rather than implying the estimate is proven.",
+    inputSchema: {},
+  },
+  async () => {
+    let report;
+    try {
+      report = calibration(new Ledger().read());
+    } catch {
+      report = calibration([]);
+    }
+    if (report.samples === 0) return text(report.verdict);
+    return text(
+      [
+        `${report.samples} executions graded${report.incomparable > 0 ? `, ${report.incomparable} not comparable` : ""}.`,
+        `mean error ${bps(report.meanErrorBps ?? 0)} (positive means it cost more than predicted)`,
+        `median ${bps(report.medianErrorBps ?? 0)} · typical miss ${bps(report.meanAbsErrorBps ?? 0)} · worst ${bps(report.worstErrorBps ?? 0)}`,
+        "",
+        ...report.byVenue.map((v) => `  ${v.venue}: ${v.samples} runs, mean ${bps(v.meanErrorBps)}`),
+        "",
+        report.verdict,
+      ].join("\n"),
     );
   },
 );

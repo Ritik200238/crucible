@@ -22,6 +22,7 @@ import { SnapshotError } from "./snapshot.ts";
 import { isSample, readSamples, sampleSweep } from "./sampler/run.ts";
 import { verifyLedger } from "./ledger/verify.ts";
 import { execute, ExecutionError } from "./exec/execute.ts";
+import { calibration } from "./exec/calibration.ts";
 import { credentialsFromEnv } from "./exec/binance-rest.ts";
 import { Ledger } from "./ledger/chain.ts";
 import { deriveState, emptyState } from "./risk/state.ts";
@@ -502,6 +503,56 @@ async function cmdStatus(args: Map<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * How well the cost model has been predicting.
+ *
+ * Reads the ledger rather than any separate record, so the grade comes from the
+ * same signed history as everything else and cannot be curated.
+ */
+function cmdCalibration(args: Map<string, string>): number {
+  let report;
+  try {
+    report = calibration(new Ledger().read());
+  } catch {
+    report = calibration([]);
+  }
+
+  if (args.get("json") === "true") {
+    console.log(JSON.stringify(report, null, 2));
+    return 0;
+  }
+
+  console.log();
+  console.log(`  ${c.bold("MODEL CALIBRATION")}`);
+  console.log();
+
+  if (report.samples === 0) {
+    console.log(`  ${c.yellow("○")} ${report.verdict}`);
+    console.log();
+    return 0;
+  }
+
+  console.log(`  executions graded   ${report.samples}`);
+  if (report.incomparable > 0) {
+    console.log(c.dim(`  not comparable      ${report.incomparable}`));
+  }
+  console.log(`  mean error          ${bps(report.meanErrorBps ?? 0)}   ${c.dim("positive means it cost more than predicted")}`);
+  console.log(`  median error        ${bps(report.medianErrorBps ?? 0)}`);
+  console.log(`  typical miss        ${bps(report.meanAbsErrorBps ?? 0)}`);
+  console.log(`  worst miss          ${bps(report.worstErrorBps ?? 0)}`);
+
+  if (report.byVenue.length > 0) {
+    console.log();
+    for (const v of report.byVenue) {
+      console.log(`    ${venueName(v.venue).padEnd(16)} ${String(v.samples).padStart(4)} runs   mean ${bps(v.meanErrorBps)}`);
+    }
+  }
+  console.log();
+  console.log(c.dim(`  ${report.verdict}`));
+  console.log();
+  return 0;
+}
+
 function cmdVerify(): number {
   const r = verifyLedger();
   console.log();
@@ -535,6 +586,7 @@ const HELP = `
     status     What can actually execute right now
     policy     Show which rules are active
     verify     Recompute the decision ledger and check its signature
+    calibration  How well the cost model has predicted real fills
     sample     Take one evidence sample across all symbols and sizes
     samples    Summarise the evidence collected so far
 
@@ -565,6 +617,7 @@ async function main(): Promise<number> {
       case "policy": return cmdPolicy(args);
       case "status": return await cmdStatus(args);
       case "verify": return cmdVerify();
+      case "calibration": return cmdCalibration(args);
       case "sample": return await cmdSample();
       case "samples": return cmdSamples(args);
       case undefined:
