@@ -5,10 +5,10 @@ Crucible decides *where* and *how* — and proves what it cost.
 
 Built for the [Binance Agent OS Mini Hackathon](https://www.binance.com/en/blog/community/8802181509900814931), Track A.
 
-**Live, and read-only: [crucible-router.vercel.app](https://crucible-router.vercel.app)** — live quotes on both
-venues, the rules in force, twenty real executions graded against what they were
-predicted to cost, and a ledger you can verify in your own browser. Point an
-agent at it:
+**Live, and read-only: [crucible-router.vercel.app](https://crucible-router.vercel.app)** — a quote priced when
+the page loads, the measured crossover, twenty real executions graded against
+what they were predicted to cost, and a ledger you can verify in your own
+browser. The app itself is at [/app](https://crucible-router.vercel.app/app). Point an agent at it:
 
 ```bash
 claude mcp add crucible --transport http https://crucible-router.vercel.app/mcp
@@ -162,7 +162,7 @@ There is also a dashboard, if you would rather see a cost breakdown than read
 one:
 
 ```bash
-npm run dashboard        # http://127.0.0.1:8787
+npm run dashboard        # landing at http://127.0.0.1:8787, the app at /app
 ```
 
 It quotes live, shows the component breakdown for both venues side by side, the
