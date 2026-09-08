@@ -129,7 +129,11 @@ test("/api/policy follows the operator's config file rather than the defaults", 
   try {
     const { body } = await getJson("/api/policy");
     assert.equal(body.version, 3);
-    assert.equal(body.source, path);
+    // Named, but not located. The file this page read is worth telling a
+    // visitor; where it sits on the operator's disk is not, and on a public
+    // instance that string is a username and a directory layout given away.
+    assert.equal(body.source, "crucible.config.json");
+    assert.doesNotMatch(body.source, /[A-Za-z]:\\|\/(home|Users)\//);
     assert.deepEqual(body.limits, { maxOrderNotionalUsd: 42 });
 
     const byName = new Map<string, boolean>(

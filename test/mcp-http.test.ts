@@ -196,3 +196,21 @@ describe("refusing to start unguarded where it would be published", () => {
     assert.throws(() => assertHostable({ PORT: "3000", CRUCIBLE_MCP_TOKEN: "   " }), /Refusing to start/);
   });
 });
+
+describe("what the page is willing to say about this machine", () => {
+  test("no absolute path reaches a visitor", async () => {
+    // The CLI prints absolute paths on purpose. This page is served to
+    // strangers, where the same string hands out a username and a directory
+    // layout for nothing.
+    for (const path of ["/api/policy", "/api/ledger"]) {
+      const body = await (await fetch(`${base}${path}`)).text();
+      assert.doesNotMatch(body, /[A-Za-z]:\\/, `${path} leaked a Windows path`);
+      assert.doesNotMatch(body, /\/(home|Users)\//, `${path} leaked a home directory`);
+    }
+  });
+
+  test("it still says which file it read", async () => {
+    const ledger = (await (await fetch(`${base}/api/ledger`)).json()) as { path: string };
+    assert.match(ledger.path, /ledger\.jsonl$/, "a visitor should still see what was read");
+  });
+});

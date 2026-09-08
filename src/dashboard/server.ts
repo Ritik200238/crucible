@@ -18,7 +18,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { once } from "node:events";
-import { resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SnapshotError, takeSnapshot } from "../snapshot.ts";
@@ -49,6 +49,22 @@ export const DEFAULT_PORT = 8787;
 function mcpOptions(): { operatorToken?: string } {
   const token = process.env.CRUCIBLE_MCP_TOKEN?.trim();
   return token ? { operatorToken: token } : {};
+}
+
+/**
+ * A path fit to publish.
+ *
+ * The CLI prints absolute paths on purpose — an operator on their own machine
+ * wants to know exactly which file was read. This page is served to strangers,
+ * where the same string hands out a username and a directory layout for
+ * nothing. Relative to the working directory says as much as anyone browsing
+ * needs, and a path outside it degrades to its filename rather than climbing
+ * back out in dots.
+ */
+function publicPath(full: string): string {
+  const rel = relative(process.cwd(), full);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return basename(full);
+  return rel.split(sep).join("/");
 }
 
 /** How many records the ledger panel shows. */
@@ -99,7 +115,7 @@ function policyPayload(): PolicyPayload {
     mode,
     live: isLiveEnabled(policy),
     version,
-    source,
+    source: source.startsWith("built-in") ? source : publicPath(source),
     rules: ALL_RULES.map((rule) => ({
       name: rule.name,
       purpose: rule.purpose,
@@ -137,7 +153,7 @@ function ledgerPayload(): LedgerPayload {
     recentUnavailable = (err as Error).message;
   }
 
-  return { ...verification, path: paths.ledger, recent, recentUnavailable };
+  return { ...verification, path: publicPath(paths.ledger), recent, recentUnavailable };
 }
 
 interface QuoteRoute {
