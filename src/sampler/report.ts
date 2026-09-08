@@ -22,6 +22,19 @@ const bps = (n: number) => (Number.isFinite(n) ? `${n.toFixed(2)} bps` : "—");
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
 
+/**
+ * A span in the unit that carries information.
+ *
+ * "0.0 hours" is true and tells a reader nothing, which on a document whose
+ * whole job is to be checkable is the wrong kind of true.
+ */
+function span(hours: number): string {
+  if (hours >= 1) return `${hours.toFixed(1)} hours`;
+  const minutes = hours * 60;
+  if (minutes >= 1) return `${minutes.toFixed(0)} minutes`;
+  return `${Math.round(minutes * 60)} seconds`;
+}
+
 /** Rows in the per-bucket table, ordered so a reader can see size take effect. */
 function bucketTable(buckets: Bucket[]): string {
   const header =
@@ -89,9 +102,11 @@ snapshot, so the two venues land on one comparable axis. A basis point is 0.01%.
 
 ## The sample
 
-- **${report.total} priced comparisons** over **${report.spanHours.toFixed(1)} hours**${report.failures > 0 ? `, plus ${report.failures} that failed to price and are recorded as failures rather than dropped` : ""}
+- **${report.total} priced comparisons** over **${span(report.spanHours)}**${report.failures > 0 ? `, plus ${report.failures} that failed to price and are recorded as failures rather than dropped` : ""}
 - From \`${report.from}\` to \`${report.to}\`
-- ${sampleCount} rows on disk
+- ${sampleCount} rows on disk${report.supersededSamples > 0 ? `
+- ${report.supersededSamples} earlier rows excluded: they were priced under an older cost model, and averaging two models together would describe neither` : ""}
+- Cost model version ${report.model}
 
 ${thin ? `> This span is under a day. It is enough to show the shape of the cost curve and\n> the size at which the cheaper venue changes, and it is **not** enough to say\n> anything about how either venue behaves across a full market cycle.\n` : ""}
 ## What it shows

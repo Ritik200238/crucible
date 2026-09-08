@@ -178,18 +178,48 @@ test("summarise leaves out samples that could not be scored", () => {
   assert.equal(report.onchainWinRate, 1);
 });
 
-test("summarise takes the span from the sampling window, not from the usable rows", () => {
+test("summarise takes the span from the rows it actually averaged", () => {
+  // A row that could not be scored contributed nothing to the result, so it
+  // must not stretch the window either. Pairing two samples with three hours of
+  // elapsed time would claim evidence that was never measured.
   const report = summarise([
     sample({ at: "2026-09-08T12:00:00.000Z" }),
     sample({ at: "2026-09-08T13:30:00.000Z" }),
-    // An unscoreable row still happened, so it still counts toward the window.
     priced({ [BINANCE_TAKER_ROUTE]: 12 }, { at: "2026-09-08T15:00:00.000Z" }),
   ]);
 
   assert.equal(report.from, "2026-09-08T12:00:00.000Z");
-  assert.equal(report.to, "2026-09-08T15:00:00.000Z");
-  assert.equal(report.spanHours, 3);
+  assert.equal(report.to, "2026-09-08T13:30:00.000Z");
+  assert.equal(report.spanHours, 1.5);
   assert.equal(report.total, 2);
+});
+
+test("summarise reports only the newest cost model, and counts what it dropped", () => {
+  // Averaging figures from two cost models produces a number that describes
+  // neither, so the older rows are excluded and the exclusion is reported.
+  const report = summarise([
+    { ...sample({ at: "2026-09-08T12:00:00.000Z" }), model: 1 },
+    { ...sample({ at: "2026-09-08T12:10:00.000Z" }), model: 1 },
+    { ...sample({ at: "2026-09-08T13:00:00.000Z" }), model: 2 },
+  ]);
+
+  assert.equal(report.model, 2);
+  assert.equal(report.total, 1);
+  assert.equal(report.supersededSamples, 2);
+  assert.equal(report.from, "2026-09-08T13:00:00.000Z", "the window follows the surviving rows");
+});
+
+test("summarise treats an unstamped row as the original model", () => {
+  // Rows written before versioning carry no marker. They are model 1, not a
+  // separate unknown category that would silently split the sample.
+  const report = summarise([
+    sample({ at: "2026-09-08T12:00:00.000Z" }),
+    { ...sample({ at: "2026-09-08T12:10:00.000Z" }), model: 1 },
+  ]);
+
+  assert.equal(report.model, 1);
+  assert.equal(report.total, 2);
+  assert.equal(report.supersededSamples, 0);
 });
 
 test("summarise orders the window even when the rows arrive out of order", () => {

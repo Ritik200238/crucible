@@ -25,6 +25,19 @@ import type {
 
 const BPS = 10_000;
 
+/**
+ * Version of the cost model.
+ *
+ * Bumped whenever a change alters what a route costs. Samples carry it so an
+ * analysis can tell whether the rows it is averaging were priced the same way.
+ * Comparing figures from two different models and reporting one number would be
+ * a quiet way of publishing something untrue.
+ *
+ * 1: original three routes.
+ * 2: maker route charges measured adverse selection.
+ */
+export const COST_MODEL_VERSION = 2;
+
 /** Cost of a route, given the size, expressed against mid. */
 export interface CostInput {
   snapshot: Snapshot;

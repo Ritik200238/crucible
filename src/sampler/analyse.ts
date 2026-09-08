@@ -34,6 +34,10 @@ export interface Bucket {
 export interface EvidenceReport {
   total: number;
   failures: number;
+  /** Cost-model version every included sample was priced under. */
+  model: number;
+  /** Samples dropped for having been priced under an older model. */
+  supersededSamples: number;
   from: string;
   to: string;
   spanHours: number;
@@ -83,7 +87,13 @@ function medianParts(samples: Sample[]): Record<string, number> {
 }
 
 export function summarise(samples: Sample[], failures = 0): EvidenceReport {
-  const usable = samples.filter((s) => edgeBps(s) !== null);
+  // Only the newest model's rows are averaged. A cost-model change moves what a
+  // route costs, so mixing versions would produce a figure that describes no
+  // model at all. The discarded count is reported rather than hidden.
+  const priced = samples.filter((s) => edgeBps(s) !== null);
+  const model = priced.reduce((max, s) => Math.max(max, s.model ?? 1), 1);
+  const usable = priced.filter((s) => (s.model ?? 1) === model);
+  const supersededSamples = priced.length - usable.length;
 
   const keyed = new Map<string, Sample[]>();
   for (const s of usable) {
@@ -122,11 +132,16 @@ export function summarise(samples: Sample[], failures = 0): EvidenceReport {
     .sort((a, b) => a.symbol.localeCompare(b.symbol) || a.notionalUsd - b.notionalUsd);
 
   const allEdges = usable.map((s) => edgeBps(s)!).filter(Number.isFinite);
-  const times = samples.map((s) => s.at).sort();
+  // The span has to come from the rows actually being reported on. Taking it
+  // from every row on disk would pair a handful of samples with the age of the
+  // file and claim hours of evidence that was never averaged.
+  const times = usable.map((s) => s.at).sort();
 
   return {
     total: usable.length,
     failures,
+    model,
+    supersededSamples,
     from: times[0] ?? "",
     to: times[times.length - 1] ?? "",
     spanHours:

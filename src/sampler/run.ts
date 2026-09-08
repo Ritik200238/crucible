@@ -17,7 +17,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { takeSnapshot } from "../snapshot.ts";
 import { fetchMid } from "../venues/binance.ts";
-import { priceAllRoutes } from "../cost/model.ts";
+import { COST_MODEL_VERSION, priceAllRoutes } from "../cost/model.ts";
 import type { Side } from "../types.ts";
 
 export const SAMPLE_PATH = "data/samples.jsonl";
@@ -30,6 +30,8 @@ export const DEFAULT_INTERVAL_MS = 10 * 60 * 1000;
 /** One priced comparison at one instant. */
 export interface Sample {
   at: string;
+  /** Cost-model version that produced these figures. Absent on rows predating it. */
+  model?: number;
   symbol: string;
   side: Side;
   notionalUsd: number;
@@ -93,6 +95,7 @@ export async function sampleOnce(
 
     const row: Sample = {
       at,
+      model: COST_MODEL_VERSION,
       symbol,
       side,
       notionalUsd,
