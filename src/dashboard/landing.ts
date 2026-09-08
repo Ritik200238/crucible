@@ -35,8 +35,8 @@ ${THEME}
     radial-gradient(60% 50% at 20% 0%, rgba(240, 185, 11, 0.10), transparent 60%),
     radial-gradient(40% 40% at 85% 20%, rgba(31, 199, 212, 0.08), transparent 60%);
 }
-.hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 48px; align-items: center; }
-h1 { margin: 0 0 22px; font-size: 50px; line-height: 1.06; font-weight: 800; letter-spacing: -0.028em; }
+.hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr); gap: 44px; align-items: center; }
+h1 { margin: 0 0 22px; font-size: 41px; line-height: 1.1; font-weight: 800; letter-spacing: -0.028em; }
 h1 span { display: block; }
 .lede { font-size: 17px; line-height: 1.6; color: var(--ink-2); max-width: 56ch; margin: 0 0 30px; }
 .lede b { color: var(--ink); font-weight: 600; }
@@ -108,7 +108,7 @@ footer .spacer { flex: 1; }
 
 @media (max-width: 960px) {
   .hero .wrap { grid-template-columns: 1fr; gap: 32px; }
-  h1 { font-size: 38px; }
+  h1 { font-size: 36px; }
   .steps { grid-template-columns: 1fr 1fr; }
   .two { grid-template-columns: 1fr; }
   .strip .wrap { grid-template-columns: 1fr 1fr; }
@@ -119,7 +119,7 @@ footer .spacer { flex: 1; }
 }
 @media (max-width: 560px) {
   .hero { padding: 48px 0 40px; }
-  h1 { font-size: 32px; }
+  h1 { font-size: 30px; }
   .steps { grid-template-columns: 1fr; }
   h2 { font-size: 26px; }
 }
