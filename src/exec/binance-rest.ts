@@ -153,7 +153,10 @@ export class BinanceRest {
   ): Promise<T> {
     const entries = Object.entries(params).filter(([, v]) => v !== undefined);
     if (signed) {
-      entries.push(["timestamp", Date.now() + this.clockOffsetMs]);
+      // Rounded again here rather than trusting the offset: this is the value
+      // the exchange actually parses, and it must be a whole number of
+      // milliseconds however the offset was arrived at.
+      entries.push(["timestamp", Math.round(Date.now() + this.clockOffsetMs)]);
       entries.push(["recvWindow", this.recvWindow]);
     }
     let query = entries.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join("&");
@@ -219,7 +222,12 @@ export class BinanceRest {
       false,
     );
     const rtt = Date.now() - before;
-    this.clockOffsetMs = serverTime - (before + rtt / 2);
+    // Rounded, because half a round trip is fractional whenever the round trip
+    // is an odd number of milliseconds — and a fractional offset makes the
+    // timestamp fractional too. Binance matches `timestamp` against ^[0-9]{1,20}$
+    // and rejects "1757337600123.5" outright, so this failed on about half of
+    // all orders depending on network timing.
+    this.clockOffsetMs = Math.round(serverTime - (before + rtt / 2));
     return this.clockOffsetMs;
   }
 

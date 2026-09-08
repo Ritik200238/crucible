@@ -679,3 +679,46 @@ test("resolveCli returns a command and a prefix when BAW_BIN is unset", () => {
     restore();
   }
 });
+
+test("an odd round trip does not make the timestamp fractional", async (t) => {
+  // The bug this pins: `serverTime - (before + rtt / 2)` is fractional whenever
+  // the round trip is an odd number of milliseconds, and the timestamp then
+  // serialises as "1757337600123.5". Binance matches the parameter against
+  // ^[0-9]{1,20}$ and rejects it, so roughly half of all orders failed on
+  // nothing but network timing.
+  t.mock.timers.enable({ apis: ["Date"], now: 1_757_337_600_000 });
+  const { fetchImpl, calls } = fakeFetch((url) => {
+    if (url.includes("/api/v3/time")) {
+      t.mock.timers.tick(1); // one millisecond: the round trip is odd
+      return { body: JSON.stringify({ serverTime: 1_757_337_600_500 }) };
+    }
+    return { body: "[]" };
+  });
+  const client = new BinanceRest({ baseUrl: DEMO, credentials: CREDS, fetchImpl });
+
+  const offset = await client.syncClock();
+  assert.ok(Number.isInteger(offset), `the offset must be whole milliseconds, got ${offset}`);
+
+  await client.myTrades("BNBUSDT", 424242);
+  const timestamp = queryOf(calls[1]!.url).get("timestamp")!;
+  assert.match(
+    timestamp,
+    /^[0-9]{1,20}$/,
+    `Binance parses timestamp as ^[0-9]{1,20}$ and would reject "${timestamp}"`,
+  );
+});
+
+test("the timestamp stays whole even if the offset somehow is not", async (t) => {
+  // Belt and braces: the value the exchange parses is rounded where it is
+  // built, not only where the offset is computed.
+  t.mock.timers.enable({ apis: ["Date"], now: 1_757_337_600_000 });
+  const { fetchImpl, calls } = fakeFetch((url) =>
+    url.includes("/api/v3/time")
+      ? { body: JSON.stringify({ serverTime: 1_757_337_600_501 }) }
+      : { body: "[]" },
+  );
+  const client = new BinanceRest({ baseUrl: DEMO, credentials: CREDS, fetchImpl });
+  await client.syncClock();
+  await client.myTrades("BNBUSDT", 1);
+  assert.match(queryOf(calls[1]!.url).get("timestamp")!, /^[0-9]{1,20}$/);
+});

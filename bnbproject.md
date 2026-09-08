@@ -286,7 +286,7 @@ A ledger that only holds successes is a marketing document.
 | | |
 |---|---|
 | Source | 23 files, ~8,000 lines of TypeScript |
-| Tests | 18 files, ~8,363 lines, **477 tests, all passing** |
+| Tests | 18 files, ~8,406 lines, **479 tests, all passing** |
 | Commits | 45 |
 | CI | GitHub Actions, green on **Linux and Windows** |
 
@@ -347,11 +347,11 @@ called done, and a refusal that happened may not be left out. Forecasts and
 advice are refused outright. Every refusal returns a correct summary built by
 concatenating records, never by generation.
 
-## 6. Fifteen bugs found by attacking it
+## 6. Sixteen bugs found by attacking it
 
 These are listed because they are the most honest thing in this document. **Not
 one of them came from reading the code.** Reviewing found nothing. Trying to
-break it found fifteen, three of which could move real money to the wrong place.
+break it found sixteen, three of which could move real money to the wrong place.
 
 | # | Bug | Why it mattered |
 |---|---|---|
@@ -370,6 +370,7 @@ break it found fifteen, three of which could move real money to the wrong place.
 | 13 | Gas was priced at the traded pair's price rather than BNB's | Gas is always paid in BNB. On BTC this overstated it 104× and invented sixty basis points of cost |
 | 14 | The wallet fee was looked up by the exchange's asset name, not the chain's | `BTC` found no entry where `BTCB` was the contract, so the lookup missed on exactly the pairs where the fee decides the venue |
 | 15 | A read-back that timed out was recorded as a failure | The order had reached the exchange. Recorded as failed, it vanished from every cap, and a slow network became a way to erase orders from the daily total |
+| 16 | Half a round trip is fractional when the round trip is odd, so the signed `timestamp` serialised as `...123.5` | Binance parses that parameter as `^[0-9]{1,20}$` and rejected it outright. Roughly half of all orders failed on nothing but network timing — and only a run of real orders exposed it |
 
 Every one is now covered by a test written from the attacker's side. A rule only
 ever fed the input it was designed to catch has not really been tested.
@@ -387,7 +388,7 @@ instead of being asserted on its own. CI runs it on both platforms.
 
 Stated plainly.
 
-### One real execution, on Demo Mode
+### Real executions, on Demo Mode
 
 The exchange path has run for real. On 2026-09-08 Crucible routed a $10 buy of
 BNB, cleared it through the policy, sent it to Binance Demo Mode, and read the
@@ -480,7 +481,7 @@ node --experimental-strip-types src/cli.ts status                               
 node --experimental-strip-types src/cli.ts policy                                  # what is protecting you
 node --experimental-strip-types src/cli.ts samples                                 # the evidence so far
 
-npm test              # 477 tests
+npm test              # 479 tests
 npm run dashboard     # http://127.0.0.1:8787
 bash demo/run.sh      # the whole story, against live prices
 ```
