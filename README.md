@@ -341,11 +341,16 @@ has no business being vague about its own error.
 - **Maker cost is an estimate.** It is weighted by a fill probability derived
   from measured flow, and the receipt's predicted-versus-realised error is the
   check on whether that model is any good.
-- **Nothing has been graded yet.** No order has been executed against a real
-  venue, so the cost model has never been checked against a fill. Every figure
-  above is a prediction. `calibration` says so in those words rather than
-  reporting an accuracy it cannot support, and it is the first thing that should
-  be re-read once orders have run.
+- **One execution, not a track record.** The pipeline has run against a real
+  exchange — Binance Demo Mode, order 7070626547, 0.013 BNB read back and
+  receipted — and that single fill is what `calibration` has to work with. One
+  sample cannot establish that the model predicts well, and the report says so
+  in those words. It did settle one thing: the fill's commission proved how the
+  BNB discount field reads, and the model now predicts what that trade actually
+  cost. Everything else above is still a prediction.
+- **Demo Mode, not mainnet.** Demo Mode is the real matching engine on a
+  practice account. No order has been sent to the live exchange, and no
+  on-chain swap has been executed at all — that needs a signed-in wallet.
 - **The evidence span is short.** It shows the shape of the cost curve and where
   the crossover sits. It does not describe a full market cycle. Rows priced
   under an earlier cost model are excluded rather than averaged in, which is

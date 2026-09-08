@@ -387,11 +387,24 @@ instead of being asserted on its own. CI runs it on both platforms.
 
 Stated plainly.
 
-### No order has ever been executed against a real venue
+### One real execution, on Demo Mode
 
-This is the single largest gap. The execution code is complete and follows
-Binance's documentation exactly. The whole pipeline is proven end to end against
-a **simulated** venue, with the call sequence asserted exactly:
+The exchange path has run for real. On 2026-09-08 Crucible routed a $10 buy of
+BNB, cleared it through the policy, sent it to Binance Demo Mode, and read the
+fill back: order **7070626547**, 0.013 BNB at 748.09, commission 0.00000975 BNB.
+The receipt compared 10.07 bps predicted against 7.57 bps realised, and that
+2.5 bps error is what proved how the BNB discount field reads — the model now
+predicts 7.57.
+
+That is one fill. It proves the path end to end and it establishes nothing
+about the model's accuracy, which `calibration` says in those words. It was on
+Demo Mode, which is the real matching engine on a practice account; nothing has
+been sent to the live exchange. **The on-chain leg has still never executed** —
+that needs a signed-in Agentic Wallet session, and until it happens this
+sentence stays here.
+
+The pipeline is also proven against a simulated venue in the suite, with the
+call sequence asserted exactly:
 
 ```
 GET  /api/v3/time
@@ -401,10 +414,7 @@ GET  /api/v3/order          ← the fill comes from here, never the POST
 GET  /api/v3/myTrades
 ```
 
-The pipeline is proven. **The venue is not.** That needs exchange API keys and a
-signed-in wallet session, and until it happens this sentence stays here.
-
-### The cost model has never been graded
+### The cost model has one sample
 
 A direct consequence of the above, and worth stating on its own because it is
 the claim a reader is most likely to assume has been checked. Every execution
