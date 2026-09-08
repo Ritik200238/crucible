@@ -260,8 +260,10 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
   // Quote
   // -------------------------------------------------------------------------
 
+  function routeLabel(route) { return venueName(route.venue) + " " + route.style.toLowerCase(); }
+
   function routeCard(route, cheapest, precision) {
-    var label = venueName(route.venue) + " " + route.style.toLowerCase();
+    var label = routeLabel(route);
     if (route.unavailable) {
       return '<div class="route off"><div class="route-top"><span class="route-name">' + esc(label) +
         '</span><span class="badge dimmer">no route</span></div><p class="note">' + esc(route.unavailable) + "</p></div>";
@@ -308,14 +310,25 @@ th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numer
       cards += routeCard(quote.routes[j], quote.cheapest, quote.quoteAssetPrecision);
     }
 
-    var verdict = "";
-    if (quote.cheapest !== null && quote.edgeBps !== null) {
+    // Named down to the style, because two of the three routes are the same
+    // venue: "Binance is cheaper" would not say which way the order goes.
+    var ranked = [];
+    for (var k = 0; k < quote.routes.length; k++) {
+      if (!quote.routes[k].unavailable) ranked.push(quote.routes[k]);
+    }
+    ranked.sort(function (a, b) { return a.totalBps - b.totalBps; });
+
+    var verdict;
+    if (ranked.length > 1) {
       var saving = (quote.edgeBps / 10000) * quote.notionalUsd;
-      verdict = '<p class="summary"><strong>' + esc(venueName(quote.cheapest.split("/")[0])) +
-        " is cheaper by " + esc(bps(quote.edgeBps)) + "</strong> " +
+      verdict = '<p class="summary"><strong>' + esc(routeLabel(ranked[0])) + " is cheaper by " +
+        esc(bps(quote.edgeBps)) + " than " + esc(routeLabel(ranked[1])) + "</strong> " +
         '<span class="dim">= ' + esc(usd(saving)) + " on this order.</span></p>";
-    } else if (quote.cheapest !== null) {
-      verdict = '<p class="summary dim">Only one route could be priced, so there is nothing to compare it against.</p>';
+    } else if (ranked.length === 1) {
+      verdict = '<p class="summary dim">Only ' + esc(routeLabel(ranked[0])) +
+        " could be priced, so there is nothing to compare it against.</p>";
+    } else {
+      verdict = '<p class="empty">Neither venue could price this order. Each route above says why.</p>';
     }
 
     el("quote").innerHTML = head + '<div class="routes">' + cards + "</div>" + verdict;

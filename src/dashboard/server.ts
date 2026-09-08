@@ -343,7 +343,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const url = new URL(req.url ?? "/", "http://dashboard.invalid");
   const path = url.pathname;
 
-  if (req.method !== "GET") {
+  // HEAD is answered wherever GET is, which HTTP requires. Node discards the
+  // body of a HEAD response on its own, so the handlers below need no special
+  // case: they build the reply as usual and only the headers reach the client.
+  if (req.method !== "GET" && req.method !== "HEAD") {
     sendJson(res, 405, {
       error: `${req.method ?? "That method"} is not allowed. The dashboard only answers GET; ` +
         `nothing here changes state.`,
