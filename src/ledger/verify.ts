@@ -35,6 +35,15 @@ export interface VerifyResult {
   reason: string | null;
   /** True only when an Ed25519 signature over this ledger's head was checked and held. */
   signatureValid: boolean;
+  /**
+   * Whether a ledger file was found at all.
+   *
+   * A missing ledger and an empty one are both zero records and both pass every
+   * check, which is why they have to be told apart here: "nothing has been
+   * recorded yet" and "the records are not where this process is looking" are
+   * very different things to report, and only one of them is fine.
+   */
+  present: boolean;
 }
 
 /**
@@ -47,11 +56,13 @@ export interface VerifyResult {
  * catches a record whose contents were edited in place.
  *
  * This function never sees a signature file, so `signatureValid` is always
- * false here. Only `verifyLedger` can establish it.
+ * false here. Only `verifyLedger` can establish it. `present` is likewise
+ * always true: the records were handed in, so there is nothing to find.
  */
 export function verifyChain(records: LedgerRecord[]): VerifyResult {
   const broken = (index: number, why: string): VerifyResult => ({
     ok: false,
+    present: true,
     records: records.length,
     brokenAt: index,
     reason: why,
@@ -102,6 +113,7 @@ export function verifyChain(records: LedgerRecord[]): VerifyResult {
 
   return {
     ok: true,
+    present: true,
     records: records.length,
     brokenAt: null,
     reason: null,
@@ -118,9 +130,14 @@ export function verifyChain(records: LedgerRecord[]): VerifyResult {
  * the count is signed alongside the head hash.
  */
 export function verifyLedger(opts: { dir?: string } = {}): VerifyResult {
-  const paths = ledgerPaths(opts.dir ?? DEFAULT_LEDGER_DIR);
+  // `ledgerPaths` already resolves CRUCIBLE_LEDGER_DIR. Naming the constant
+  // here instead meant this function looked somewhere else than the Ledger it
+  // was verifying — which on a hosted instance reported an intact chain of
+  // zero records while the real ledger sat in the directory nobody checked.
+  const paths = ledgerPaths(opts.dir);
 
-  const text = existsSync(paths.ledger) ? readFileSync(paths.ledger, "utf8") : "";
+  const present = existsSync(paths.ledger);
+  const text = present ? readFileSync(paths.ledger, "utf8") : "";
   const parsed = parseLedgerText(text);
 
   const chain = verifyChain(parsed.records);
@@ -157,6 +174,7 @@ export function verifyLedger(opts: { dir?: string } = {}): VerifyResult {
     brokenAt,
     reason: reason === "" ? null : reason,
     signatureValid: signature.valid,
+    present,
   };
 }
 

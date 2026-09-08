@@ -15,5 +15,6 @@
   ],
   "env": {
     "CRUCIBLE_LEDGER_DIR": "deploy/ledger"
-  }
+  },
+  "outputDirectory": "public"
 }

@@ -1,0 +1,6 @@
+# The pages here are live market quotes, priced when they are requested.
+# Crawling them costs an exchange call per fetch and caches a price that was
+# only true for a second, so: don't.
+User-agent: *
+Disallow: /api/
+Allow: /$

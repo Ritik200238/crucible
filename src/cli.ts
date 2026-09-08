@@ -26,7 +26,7 @@ import { checkClaim } from "./ledger/claims.ts";
 import { execute, ExecutionError, reconcile } from "./exec/execute.ts";
 import { calibration } from "./exec/calibration.ts";
 import { credentialsFromEnv, type Credentials } from "./exec/binance-rest.ts";
-import { Ledger, type LedgerRecord } from "./ledger/chain.ts";
+import { Ledger, ledgerPaths, type LedgerRecord } from "./ledger/chain.ts";
 import { deriveState, emptyState } from "./risk/state.ts";
 import { DEMO, MAINNET } from "./exec/binance-rest.ts";
 import { walletStatus, walletVersion } from "./exec/wallet.ts";
@@ -515,7 +515,9 @@ async function cmdStatus(args: Map<string, string>): Promise<number> {
 
   const ledger = verifyLedger();
   console.log(
-    ledger.records === 0
+    !ledger.present
+      ? `  ${c.yellow("○")} Ledger       ${c.dim(`no ledger file at ${ledgerPaths().ledger} — nothing recorded here yet`)}`
+      : ledger.records === 0
       ? `  ${c.dim("○")} Ledger       ${c.dim("no decisions recorded yet")}`
       : ledger.ok
         ? `  ${c.green("●")} Ledger       ${ledger.records} records, chain verified${ledger.signatureValid ? ", signature valid" : ""}`

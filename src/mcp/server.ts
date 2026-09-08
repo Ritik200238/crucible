@@ -26,7 +26,7 @@ import { measuredImpactBps, route, RouteError } from "../decide/router.ts";
 import { evaluate } from "../risk/engine.ts";
 import { ALL_RULES } from "../risk/rules.ts";
 import { ConfigError, isLiveEnabled, loadPolicy } from "../config.ts";
-import { Ledger } from "../ledger/chain.ts";
+import { Ledger, ledgerPaths } from "../ledger/chain.ts";
 import { deriveState, emptyState } from "../risk/state.ts";
 import { verifyLedger } from "../ledger/verify.ts";
 import { checkClaim } from "../ledger/claims.ts";
@@ -515,6 +515,13 @@ export function buildServer(opts: BuildOptions): McpServer {
     },
     async () => {
       const r = verifyLedger();
+      if (!r.present) {
+        return text(
+          `No ledger file at ${ledgerPaths().ledger}. Nothing has been recorded here, or this ` +
+            `process is looking in the wrong place — set CRUCIBLE_LEDGER_DIR if the ledger lives ` +
+            `elsewhere. An absent ledger is not a verified one.`,
+        );
+      }
       return text(
         r.ok
           ? `Ledger intact: ${r.records} records, chain verified, signature ${r.signatureValid ? "valid" : "not checked"}.`

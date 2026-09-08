@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Ledger, ledgerPaths } from "../src/ledger/chain.ts";
+import { verifyLedger } from "../src/ledger/verify.ts";
 import { deriveState } from "../src/risk/state.ts";
 import { reconcile, ExecutionError } from "../src/exec/execute.ts";
 import { calibration } from "../src/exec/calibration.ts";
@@ -388,6 +389,46 @@ describe("where the ledger lives", () => {
     try {
       process.env.CRUCIBLE_LEDGER_DIR = "deploy/ledger";
       assert.match(ledgerPaths("somewhere/else").dir.replace(/\\/g, "/"), /somewhere\/else$/);
+    } finally {
+      if (saved === undefined) delete process.env.CRUCIBLE_LEDGER_DIR;
+      else process.env.CRUCIBLE_LEDGER_DIR = saved;
+    }
+  });
+});
+
+describe("a ledger that is not there is not a verified one", () => {
+  test("verification reports absence rather than an intact empty chain", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crucible-absent-"));
+    dirs.push(dir);
+    const r = verifyLedger({ dir });
+    // Both a missing ledger and a fresh one hold zero records and pass every
+    // check. Reporting "chain verified, signature valid" for a file that was
+    // never found is the failure this pins: it reads as proof when it is the
+    // absence of any.
+    assert.equal(r.present, false);
+    assert.equal(r.records, 0);
+  });
+
+  test("an empty but existing ledger is present", () => {
+    const ledger = tempLedger();
+    ledger.append("execution.refused", { planId: "p", reason: "test" });
+    const r = verifyLedger({ dir: ledger.paths.dir });
+    assert.equal(r.present, true);
+    assert.equal(r.records, 1);
+  });
+
+  test("verification follows CRUCIBLE_LEDGER_DIR, like everything else", () => {
+    // The bug this pins: verification named the default directory itself
+    // instead of resolving it, so on a hosted instance it checked a folder
+    // that did not exist and called the result intact.
+    const ledger = tempLedger();
+    ledger.append("execution.refused", { planId: "p", reason: "test" });
+    const saved = process.env.CRUCIBLE_LEDGER_DIR;
+    try {
+      process.env.CRUCIBLE_LEDGER_DIR = ledger.paths.dir;
+      const r = verifyLedger();
+      assert.equal(r.present, true, "verification must look where the ledger actually is");
+      assert.equal(r.records, 1);
     } finally {
       if (saved === undefined) delete process.env.CRUCIBLE_LEDGER_DIR;
       else process.env.CRUCIBLE_LEDGER_DIR = saved;
