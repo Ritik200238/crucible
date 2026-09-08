@@ -1,8 +1,8 @@
 # Binance Agent OS Mini Hackathon — everything known
 
-Reference notes for the entry. Facts here were read from Binance's own pages,
-probed live, or taken from competitors' published code. Anything not verified is
-labelled as such rather than smoothed over.
+Reference notes for the entry. Facts here were read from Binance's own pages or
+probed live from this machine. Anything not verified is labelled as such rather
+than smoothed over.
 
 ---
 
@@ -175,93 +175,9 @@ impact.
 
 ---
 
-## 9. The competition
+## 9. Verified versus not verified
 
-Two entries were examined by cloning and reading their code, not by reading their
-claims.
-
-### Governor — `github.com/Pratiikpy/binance-governor`
-
-- 8,626 lines of TypeScript, MIT licensed
-- An MCP server that **proxies Binance's own**. Reads pass through; every write
-  clears a deterministic policy engine, is validated by `spot.orderTest`, and is
-  appended to a hash-chained Ed25519-signed ledger.
-- **123 tests — counted directly in the source; the claim is accurate**
-- 22 gates. Claims 18 of 18 adversarial attacks blocked, 6 of 6 judge journeys,
-  CI on Linux and Windows.
-- A second gate asks whether a strategy is statistically supported at all, using
-  Deflated Sharpe Ratio and Probability of Backtest Overfitting
-- Notable rigour: swept 71 moving-average configurations, then judged the winner
-  against the fact that 71 were tried, and refused it. Then randomised the trade
-  dates and found random timing scored higher — proving no skill, only a rising
-  market.
-- Also verifies the **agent's own chat summary** against the ledger, catching
-  invented figures, unconfirmed fills, and summaries that are true in every word
-  while omitting a refusal
-- Found ten defects by attacking its own system, including a daily-loss halt that
-  kept its baseline only in memory, so restarting the process turned "down 2.9%,
-  blocked" into "0%, allowed"
-- Ships a hosted MCP endpoint, a live console, a 90-second video, and a full
-  technical writeup
-- Its own code states the on-chain path is built but the credential is not
-  present — so the wallet leg was never executed
-
-### Deltr — `github.com/mrnetwork0001/Deltr`
-
-- 27,280 lines of Python
-- One strategy done thoroughly: delta-neutral basis and funding. Long BNB on
-  PancakeSwap V3, short the same quantity of the Binance USDⓈ-M perpetual, so the
-  book carries no directional view.
-- Prices the **entire round trip** — pool fee, price impact, gas, perp slippage,
-  taker fee, both legs, entry and exit — before calling anything actionable, and
-  declines when the arithmetic says no
-- 683 tests claimed. A 798-line risk gate with 19 ordered checks, zero LLM
-  involvement, running in roughly 2 microseconds, producing byte-identical
-  decision logs.
-- Proposals are single-use, expire in 60 seconds, and are re-priced and re-gated
-  at execution
-- Itself an MCP server with 22 tools; ships as a Skills Hub skill; executes the
-  on-chain leg through the Agentic Wallet and never holds a key
-- Claims real mainnet execution with a Binance order ID and a BSC transaction
-  hash, plus the three failed attempts before it. **Not independently verified —
-  an order ID would not appear in a repository.**
-- Analysed 500 days of real funding history. Its headline finding: *"the round
-  trip is the whole game, and execution style decides it"* — posting as a maker
-  rather than taking is what makes the strategy viable at all.
-- Ships a hosted MCP endpoint, a live dashboard with a paper engine running
-  continuously, and a video
-
-### What both have in common
-
-Both are, at their core, machines that say **no**. Governor states it directly:
-*"I did not build something that trades well. I built the layer that decides
-whether an agent is allowed to trade at all."* Deltr's headline is that its own
-trade does not currently pay.
-
-Both also explicitly disclaim finding any alpha. Governor cites roughly 150
-published studies since 1956 finding no cost-aware, out-of-sample trading edge.
-
-**Neither routes between venues per order.** Deltr proved that execution style
-decides profitability and then built one arbitrage; Governor decides whether an
-order is allowed and never touches how well it fills.
-
-### Where they set the bar
-
-Anything competitive has to match this level of finish:
-
-- A hosted MCP endpoint a judge can connect to in one command
-- A public dashboard showing real data
-- A real test suite, adversarially tested
-- An evidence document with regenerable numbers
-- A short video that shows a result rather than describing one
-- Limitations stated plainly rather than omitted
-
----
-
-## 10. Verified versus not verified
-
-**Verified** — read from Binance's own pages, probed live from this machine, or
-counted in competitors' source:
+**Verified** — read from Binance's own pages or probed live from this machine:
 
 - Every prize figure, entry step, eligibility exclusion and survey link
 - Every Agent OS endpoint, tool name, CLI command and fee above
@@ -270,20 +186,16 @@ counted in competitors' source:
 - That public BSC RPC and the PancakeSwap V3 quoter answer from this network
 - That Binance spot depth, book ticker, filters and trade feeds answer from this
   network
-- Governor's test count
 
 **Not verified:**
 
-- Deltr's claimed mainnet order ID and transaction hash
-- Deltr's 683 test count
-- Whether "Trading Workflows" — the label Governor used on its entry — is an
-  official sub-theme or that entrant's own framing
+- Whether the track has official sub-themes beyond the two published tracks
 - The total number of entries, and therefore the real odds against 53 places
 - Any judging criteria, because none were published
 
 ---
 
-## 11. Official links
+## 10. Official links
 
 | | |
 |---|---|
