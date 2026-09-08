@@ -1,41 +1,282 @@
 /**
- * Core domain types for Guardrail.
+ * Core domain types.
  *
- * The shape here is deliberately narrow: an agent proposes an order, Guardrail
- * evaluates it against a policy, and returns a decision. Nothing reaches Binance
- * until the decision says it may.
+ * The shape of the product is one pipeline: an intent becomes a snapshot,
+ * a snapshot becomes costs, costs become a plan, a plan becomes a receipt.
+ * Every stage after the snapshot is a pure function of it, which is what makes
+ * a routing decision reproducible from its fingerprint alone.
  */
 
 export type Side = "BUY" | "SELL";
-export type OrderType = "MARKET" | "LIMIT";
-export type Market = "SPOT" | "MARGIN" | "USDM_FUTURES" | "COINM_FUTURES";
 
-/** An order an agent wants to place. Not yet sent anywhere. */
+/** Where an order can be filled. */
+export type Venue = "BINANCE_SPOT" | "ONCHAIN";
+
+/** How it is filled once a venue is chosen. */
+export type Style = "TAKER" | "MAKER" | "SLICED";
+
+/** What the caller wants to trade, before anything has been priced. */
+export interface Intent {
+  symbol: string;
+  side: Side;
+  /** Size in the quote asset, e.g. 500 USDT. Exactly one of these is set. */
+  quoteQty?: number;
+  /** Size in the base asset, e.g. 0.65 BNB. */
+  baseQty?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Market state
+// ---------------------------------------------------------------------------
+
+/** One resting price level. Quantities are in the base asset. */
+export interface BookLevel {
+  price: number;
+  qty: number;
+}
+
+export interface OrderBook {
+  /** Highest first. */
+  bids: BookLevel[];
+  /** Lowest first. */
+  asks: BookLevel[];
+  lastUpdateId: number;
+}
+
+/**
+ * The exchange's own constraints on an order.
+ *
+ * Field names match Binance's `exchangeInfo` filters so a reader can map them
+ * back to the source: LOT_SIZE.stepSize, PRICE_FILTER.tickSize,
+ * NOTIONAL.minNotional.
+ */
+export interface SymbolFilters {
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+  baseAssetPrecision: number;
+  quoteAssetPrecision: number;
+  stepSize: number;
+  minQty: number;
+  maxQty: number;
+  tickSize: number;
+  minNotional: number;
+}
+
+/**
+ * Fees actually charged to this account, as fractions (0.001 = 10 bps).
+ *
+ * `source` records whether these were read from the account or fallen back to
+ * the public VIP-0 schedule. A cost model quoting fees it could not verify has
+ * to say so, because the whole product is a comparison of small numbers.
+ */
+export interface CommissionRates {
+  maker: number;
+  taker: number;
+  source: "account" | "vip0-default";
+}
+
+/** A price from the on-chain pool, per fee tier. */
+export interface OnchainTierQuote {
+  /** Pool fee in hundredths of a bip: 100 = 0.01%, 2500 = 0.25%. */
+  feeTier: number;
+  /** Units of the output token received for the requested input. */
+  amountOut: number;
+  /** Effective price, quote per base. */
+  price: number;
+  /** The quoter's own gas estimate for the swap. */
+  gasEstimate: number;
+}
+
+export interface OnchainQuote {
+  chainId: number;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: number;
+  tiers: OnchainTierQuote[];
+  /** The tier with the best output for this size. Null when none answered. */
+  best: OnchainTierQuote | null;
+  gasPriceWei: number;
+  /** Cost of the swap in USD at the current gas price. */
+  gasCostUsd: number;
+  /**
+   * The pool's price for a size small enough to move it almost none, on the
+   * same tier as `best`.
+   *
+   * This exists to keep the cost breakdown honest. Measuring impact against the
+   * Binance mid conflates two different things: how far this order pushes the
+   * pool, and how far the pool was already trading from the exchange. The first
+   * is a cost of the order; the second is a property of the market that can go
+   * either way. Separating them needs a near-zero-size reference, which is what
+   * this is.
+   */
+  referencePrice: number | null;
+  /** Independent quote from the wallet CLI, when a session exists. */
+  walletQuote: WalletQuote | null;
+}
+
+/** The executable quote from the Agentic Wallet, which is what actually fills. */
+export interface WalletQuote {
+  fromSymbol: string;
+  toSymbol: string;
+  amountIn: number;
+  amountOut: number;
+  slippage: number;
+}
+
+/** Base-asset volume per second arriving on each side, measured, not assumed. */
+export interface TradeFlow {
+  /** Sellers crossing into the bid. This is what fills a resting buy. */
+  hitsBidPerSec: number;
+  /** Buyers lifting the ask. This is what fills a resting sell. */
+  liftsAskPerSec: number;
+  /** Seconds the measurement spans. A short window is a weak measurement. */
+  windowSec: number;
+}
+
+/**
+ * Everything the decision is allowed to depend on, captured at one instant.
+ *
+ * Hashed and stored with every decision. Two snapshots with the same hash must
+ * produce the same plan, which is the property the whole audit trail rests on.
+ */
+export interface Snapshot {
+  symbol: string;
+  takenAt: number;
+  /** Mid of the Binance book. All costs are quoted in bps of this. */
+  mid: number;
+  bestBid: number;
+  bestAsk: number;
+  spreadBps: number;
+  book: OrderBook;
+  filters: SymbolFilters;
+  commission: CommissionRates;
+  flow: TradeFlow;
+  onchain: OnchainQuote | null;
+  /** Reason the on-chain side is absent, when it is. */
+  onchainUnavailable?: string;
+  hash: string;
+}
+
+// ---------------------------------------------------------------------------
+// Cost
+// ---------------------------------------------------------------------------
+
+/** One named component of a cost, in basis points of mid. */
+export interface CostComponent {
+  name: string;
+  bps: number;
+  /** Plain-English note shown in the report. */
+  detail: string;
+  /** True when this figure is modelled rather than read from a venue. */
+  estimated?: boolean;
+}
+
+export interface CostEstimate {
+  venue: Venue;
+  style: Style;
+  components: CostComponent[];
+  /** Sum of the components. */
+  totalBps: number;
+  totalUsd: number;
+  /** Expected average fill price after all costs. */
+  effectivePrice: number;
+  /** Present when this route cannot be used, with the reason. */
+  unavailable?: string;
+  /** True when any component is modelled. */
+  hasEstimates: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// The plan
+// ---------------------------------------------------------------------------
+
+/** One child order of a sliced execution. */
+export interface Slice {
+  index: number;
+  baseQty: number;
+  /** Milliseconds after the plan starts that this child should be sent. */
+  offsetMs: number;
+}
+
+export interface Plan {
+  id: string;
+  /** SHA-256 over intent, snapshot hash and policy hash. */
+  fingerprint: string;
+  intent: Intent;
+  snapshotHash: string;
+  createdAt: number;
+  /** A plan cannot execute after this. It is re-priced, never replayed. */
+  expiresAt: number;
+  chosen: CostEstimate;
+  alternatives: CostEstimate[];
+  /** Saving against the best rejected route, in bps and dollars. */
+  savingBps: number;
+  savingUsd: number;
+  baseQty: number;
+  quoteQty: number;
+  slices: Slice[];
+  /** Why this route, in one sentence. */
+  rationale: string;
+}
+
+// ---------------------------------------------------------------------------
+// Execution and receipts
+// ---------------------------------------------------------------------------
+
+export type FillStatus = "FILLED" | "PARTIAL" | "FAILED" | "PENDING";
+
+/** A fill as re-read from the venue, never as returned by the placing call. */
+export interface ConfirmedFill {
+  venue: Venue;
+  status: FillStatus;
+  filledBaseQty: number;
+  filledQuoteQty: number;
+  avgPrice: number;
+  feeAsset: string;
+  feeAmount: number;
+  isMaker: boolean | null;
+  /** Exchange order id, or the on-chain transaction hash. */
+  reference: string;
+  confirmedBy: string;
+}
+
+export interface Receipt {
+  planId: string;
+  fingerprint: string;
+  intent: Intent;
+  predicted: CostEstimate;
+  alternative: CostEstimate | null;
+  fills: ConfirmedFill[];
+  realisedBps: number;
+  realisedUsd: number;
+  /** Realised minus predicted. The product's own honesty metric. */
+  errorBps: number;
+  savingBps: number;
+  savingUsd: number;
+  completedAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Risk
+// ---------------------------------------------------------------------------
+
+export type Market = "SPOT" | "MARGIN" | "USDM_FUTURES" | "COINM_FUTURES";
+export type OrderType = "MARKET" | "LIMIT";
+
+/** An order as the risk engine sees it. */
 export interface ProposedOrder {
   symbol: string;
   side: Side;
   type: OrderType;
   market: Market;
-  /** Amount in the base asset, e.g. 0.5 BTC. Mutually exclusive with quoteOrderQty. */
   quantity?: number;
-  /** Amount in the quote asset, e.g. 100 USDT. Mutually exclusive with quantity. */
   quoteOrderQty?: number;
-  /** Required for LIMIT orders. */
   price?: number;
-  /** Futures only. Absent means the account default applies. */
   leverage?: number;
-  /** Futures only. A reduce-only order can shrink a position but never grow one. */
   reduceOnly?: boolean;
-}
-
-/** What the account looks like at the moment of evaluation. */
-export interface AccountSnapshot {
-  equityUsd: number;
-  positions: Position[];
-  /** Realised PnL since 00:00 UTC today. Negative means down. */
-  realisedPnlTodayUsd: number;
-  /** Where these numbers came from, so a decision can be audited honestly. */
-  source: "live" | "simulated";
+  /** Set once a route is chosen, so venue-aware rules can act on it. */
+  venue?: Venue;
 }
 
 export interface Position {
@@ -43,26 +284,25 @@ export interface Position {
   notionalUsd: number;
 }
 
-/**
- * ALLOW  - passes every rule, may be sent
- * CONFIRM - passes, but a human must approve first
- * BLOCK  - at least one rule refuses it; it will not be sent
- */
+export interface AccountSnapshot {
+  equityUsd: number;
+  positions: Position[];
+  realisedPnlTodayUsd: number;
+  source: "live" | "simulated";
+}
+
 export type Verdict = "ALLOW" | "CONFIRM" | "BLOCK";
 
 export interface RuleResult {
   rule: string;
   verdict: Verdict;
-  /** Human-readable, and written to be read aloud in a terminal. */
   message: string;
-  /** The numbers behind the message, for the audit log. */
   detail?: Record<string, unknown>;
 }
 
 export interface Decision {
   verdict: Verdict;
   order: ProposedOrder;
-  /** Best-effort USD value of the order at evaluation time. */
   notionalUsd: number;
   markPrice: number;
   results: RuleResult[];
@@ -71,7 +311,6 @@ export interface Decision {
   timestamp: string;
 }
 
-/** No-trade window, expressed in UTC "HH:MM" and inclusive of the start minute. */
 export interface NoTradeWindow {
   start: string;
   end: string;
@@ -79,43 +318,47 @@ export interface NoTradeWindow {
 }
 
 /**
- * The user's rules. Every field is optional: an absent rule is simply not
- * enforced, which keeps the config honest about what is actually being checked.
+ * The operator's rules. Every field is optional; an absent rule is not
+ * enforced, and `crucible policy` reports exactly which ones are live.
  */
 export interface Policy {
   version: number;
-  /**
-   * dry-run: decisions are made and logged, but no order is ever transmitted.
-   * live:    ALLOW and confirmed CONFIRM orders are sent to Binance.
-   */
   mode: "dry-run" | "live";
   maxOrderNotionalUsd?: number;
   maxDailyNotionalUsd?: number;
   maxPositionPctOfEquity?: number;
   maxLeverage?: number;
-  /** Halt all new risk once realised losses today exceed this share of equity. */
   dailyLossLimitPct?: number;
   symbolAllowlist?: string[];
   symbolDenylist?: string[];
-  /** Blocks new entries for N minutes after a realised loss. Stops revenge trading. */
   cooldownAfterLossMinutes?: number;
-  /** Runaway-agent brake. */
   maxOrdersPerHour?: number;
-  /** Orders at or above this notional need a human yes, even when every rule passes. */
   confirmAboveNotionalUsd?: number;
   noTradeWindowsUtc?: NoTradeWindow[];
   allowedMarkets?: Market[];
+
+  // Execution rules. These are what make the risk engine specific to routing
+  // rather than to trading in general.
+
+  /** Refuse when walking the book for this size costs more than this. */
+  maxImpactBps?: number;
+  /** Refuse when the quote has drifted more than this between plan and send. */
+  maxSlippageBps?: number;
+  /** Refuse when less than this much rests within `depthWindowBps` of mid. */
+  minDepthNotionalUsd?: number;
+  depthWindowBps?: number;
+  /** Refuse a decision made on a snapshot older than this. */
+  snapshotMaxAgeMs?: number;
+  venueAllowlist?: Venue[];
+  /** Refuse when the two independent on-chain quotes disagree by more. */
+  maxQuoteDisagreementBps?: number;
 }
 
-/** Rolling state Guardrail keeps so that time-based rules mean something. */
-export interface GuardrailState {
-  /** UTC date key, YYYY-MM-DD. Resets the daily counters when it rolls over. */
+export interface RollingState {
   day: string;
   notionalTodayUsd: number;
   ordersToday: number;
-  /** ISO timestamps of orders sent, newest last. Used for the hourly rate limit. */
   recentOrderTimes: string[];
-  /** ISO timestamp of the most recent realised loss, or null. */
   lastLossAt: string | null;
   realisedPnlTodayUsd: number;
 }
@@ -123,27 +366,18 @@ export interface GuardrailState {
 export interface EvaluationContext {
   policy: Policy;
   account: AccountSnapshot;
-  state: GuardrailState;
+  state: RollingState;
   markPrice: number;
   now: Date;
+  /** Present for execution rules; absent when only the base rules apply. */
+  snapshot?: Snapshot;
+  /** Impact of this order against the live book, in bps. */
+  impactBps?: number;
 }
 
-/** A rule is a pure function. That makes the whole engine trivially testable. */
 export interface Rule {
   name: string;
-  /** One line describing what this rule protects against. Shown by `guardrail policy`. */
   purpose: string;
-  /**
-   * Whether the user has configured this rule at all.
-   *
-   * Kept separate from `evaluate` because the two answer different questions.
-   * `evaluate` returns null when a rule does not apply to *this order* - a
-   * leverage cap is configured but silent on a spot trade. Only this predicate
-   * can honestly say whether a limit is switched on, and reporting "off" for a
-   * limit that is actually armed would be the worst kind of wrong for a safety
-   * tool.
-   */
   isConfigured(policy: Policy): boolean;
-  /** Returns null when the rule does not apply to this particular order. */
   evaluate(order: ProposedOrder, ctx: EvaluationContext): RuleResult | null;
 }
