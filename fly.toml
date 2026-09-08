@@ -1,0 +1,31 @@
+# Crucible, hosted read-only.
+#
+# One machine, one process. It holds no exchange credential, no wallet session
+# and no signing key, so the two tools that could move money are refused twice
+# over: by the operator token, and by having nothing to execute with.
+
+app = "crucible-router"
+primary_region = "sin"
+
+[build]
+
+[env]
+  CRUCIBLE_DASHBOARD_PORT = "8787"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Nothing here holds state between requests, so the machine can stop when
+  # idle and start again on the next visitor. A cold start is a second.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 40
+    hard_limit = 80
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

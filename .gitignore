@@ -19,3 +19,6 @@ reference/
 # sampler process log; the samples themselves are the evidence and are kept
 data/sampler.log
 crucible.config.json
+
+# A signing key must never be built into an image.
+deploy/ledger/ledger-key.json

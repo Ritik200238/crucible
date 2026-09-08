@@ -1,0 +1,10 @@
+node_modules
+.git
+.github
+competitors
+test
+scripts
+demo
+.crucible
+crucible.config.json
+*.md
