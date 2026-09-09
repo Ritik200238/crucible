@@ -136,11 +136,37 @@ Measured across 660 samples spanning 7.1 hours. On-chain was cheaper in 41% of t
 <!-- EVIDENCE:END -->
 
 **The cheaper venue changes with size, and the crossover is different for each
-pair.** BNB/USDT stays cheaper on-chain up to about $10,000. ETH/USDT flips ten
-times earlier, because its pool is shallower. BTC/USDT and XRP/USDT never win
-on-chain at any size sampled: neither BTCB nor XRP is named in the wallet's free
-fee group, so a 50 bps service fee lands on the swap and no pool depth can make
-that back.
+pair.** BNB/USDT wins on-chain in every $10,000 sample and still wins two times
+in three at $100,000. ETH/USDT has already turned by $10,000, because its pool
+is shallower. BTC/USDT and XRP/USDT never win on-chain at any size sampled:
+neither BTCB nor XRP is named in the wallet's free fee group, so a 50 bps
+service fee lands on the swap and no pool depth can make that back.
+
+Those are four fixed sizes, which is enough to show the flip exists but not
+where it is. `crucible crossover` bisects the live cost curves to find it:
+
+```
+crucible crossover --symbol BNBUSDT
+
+       $100.00   binance    7.57   on-chain    1.67    on-chain
+    $35,355.00   binance    9.62   on-chain    4.77    on-chain
+    $88,440.00   binance   10.77   on-chain   10.29    on-chain
+    $94,015.00   binance   10.86   on-chain   10.86    Binance spot maker
+   $250,000.00   binance   13.41   on-chain   31.32    Binance spot maker
+
+crossover  $93,302 ± 2%
+```
+
+Twelve live quotes, pinned to two per cent. Run it three times in an afternoon
+and it reads $104k, then $93k, then $90k — which is the point, not a defect: the
+flip moves with the book, the pool, the gas price and your own fee tier, so it
+is a reading rather than a constant. There is nowhere to look this number up.
+
+Two things it refuses to do. On BTC/USDT it stops after two quotes and reports
+no crossover, rather than bisecting a curve that never crosses. And when one
+venue cannot price an order at all — the book too thin, the pool too shallow —
+the lone answer is not called a winner: the top of the range walks down until
+both venues quote, and the range actually used is stated.
 
 That is the entire argument for routing per order rather than picking a venue
 once and living with it. A product that had assumed on-chain was cheaper —
@@ -166,6 +192,7 @@ git clone <this repo> crucible && cd crucible && npm install
 node --experimental-strip-types src/cli.ts quote  --symbol BNBUSDT --usd 500        # price every route
 node --experimental-strip-types src/cli.ts route  --symbol BNBUSDT --usd 50000      # choose one, and gate it
 node --experimental-strip-types src/cli.ts route  --symbol BNBUSDT --usd 2000000    # watch the risk engine refuse
+node --experimental-strip-types src/cli.ts crossover --symbol BNBUSDT                # the size where the venue flips
 node --experimental-strip-types src/cli.ts policy                                    # what is protecting you
 node --experimental-strip-types src/cli.ts samples                                   # the evidence so far
 node --experimental-strip-types src/cli.ts calibration                               # how wrong the model has been
@@ -211,7 +238,7 @@ claude mcp add crucible --transport http http://127.0.0.1:8787/mcp
 
 To host it, give the instance an operator token. That one variable does three
 things: binds every interface instead of loopback, **opens the instance to the
-public** — `quote`, `route`, `policy`, `evidence`, `calibration`,
+public** — `quote`, `crossover`, `route`, `policy`, `evidence`, `calibration`,
 `check_claim`, `verify_ledger` and `status` answer anyone — and requires
 `Authorization: Bearer <token>` before `execute` or `reconcile` will act:
 
@@ -227,6 +254,7 @@ beyond loopback, so a hosted instance cannot be open by accident.
 | Tool | What it does |
 |---|---|
 | `quote` | Price every route. Decides nothing, sends nothing. |
+| `crossover` | The order size where the cheaper venue changes, found by bisecting live quotes |
 | `route` | Choose the cheapest, gate it, return a fingerprinted plan |
 | `execute` | Execute a plan by id, and confirm the fill |
 | `policy` | Which rules are in force |

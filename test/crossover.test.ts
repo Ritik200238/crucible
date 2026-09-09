@@ -113,6 +113,62 @@ describe("when a venue cannot be priced", () => {
     assert.equal(result.crossoverUsd, null);
   });
 
+  test("a top the market will not price is brought down until it will", async () => {
+    // The case that produced a false reading live: at $500,000 the book was too
+    // thin to price the order at all, and the only route that answered was
+    // on-chain. Rather than give up — or, worse, call the lone answer a winner —
+    // the top of the range walks down until both venues quote.
+    const probed: number[] = [];
+    const thinAbove200k: Quoter = async (usd) => {
+      probed.push(usd);
+      return {
+        mid: 100,
+        routes: [
+          route("BINANCE_SPOT", "TAKER", 10, usd > 200_000 ? "book too thin at this size" : undefined),
+          route("ONCHAIN", "TAKER", 1 + (9 * usd) / 50_000),
+        ],
+      };
+    };
+    const result = await findCrossover(thinAbove200k, { symbol: "BNBUSDT", side: "BUY", minUsd: 100, maxUsd: 500_000 });
+
+    assert.ok(probed.includes(500_000), "it has to try the range it was given first");
+    assert.ok(
+      probed.some((u) => u <= 200_000 && u > 100_000),
+      `expected the top to be walked down, probed ${probed.join(", ")}`,
+    );
+    // Within the range that does price, the flip is still at 50,000.
+    assert.ok(result.crossoverUsd !== null);
+    assert.ok(Math.abs(result.crossoverUsd! - 50_000) / 50_000 < 0.15);
+    assert.match(result.verdict, /nothing would price an order as large as/);
+  });
+
+  test("a lone answer is never reported as a venue winning", async () => {
+    // Nothing prices on Binance above the smallest size, so bracketing cannot
+    // rescue it. Reporting "on-chain is cheaper at every size" here would turn
+    // a missing quote into a comparison nobody made.
+    const binanceOnlyTiny: Quoter = async (usd) => ({
+      mid: 100,
+      routes: [
+        route("BINANCE_SPOT", "TAKER", 10, usd > 150 ? "book too thin at this size" : undefined),
+        route("ONCHAIN", "TAKER", 70),
+      ],
+    });
+    const result = await findCrossover(binanceOnlyTiny, { symbol: "BNBUSDT", side: "BUY", minUsd: 100, maxUsd: 500_000 });
+
+    assert.equal(result.crossoverUsd, null);
+    assert.equal(result.cheapestWhenLarge, null, "an unpriced end has no winner");
+    assert.doesNotMatch(
+      result.verdict,
+      /cheaper at every size/,
+      "a venue standing alone must never be reported as having won",
+    );
+    assert.match(result.verdict, /could not price this order/);
+    // The probe still carries what was read, so the gap is visible.
+    const top = result.probes.find((p) => p.binanceBps === null)!;
+    assert.equal(top.onchainBps, 70);
+    assert.equal(top.edgeBps, null);
+  });
+
   test("neither venue priceable is said plainly", async () => {
     const nothing: Quoter = async () => ({
       mid: 100,

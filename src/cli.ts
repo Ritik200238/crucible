@@ -783,10 +783,15 @@ async function cmdCrossover(args: Map<string, string>): Promise<number> {
     mid,
   );
 
-  console.log();
-  console.log(`  ${c.bold("CRUCIBLE")}  ${c.dim(`${symbol} ${side} — where the cheaper venue changes`)}`);
-  console.log(c.dim(`  Each probe below is a live quote at that size. This takes a few seconds.`));
-  console.log();
+  // Nothing but JSON goes to stdout under --json: this output is meant to be
+  // piped, and a friendly header in front of it makes it unparseable.
+  const asJson = args.get("json") === "true";
+  if (!asJson) {
+    console.log();
+    console.log(`  ${c.bold("CRUCIBLE")}  ${c.dim(`${symbol} ${side} — where the cheaper venue changes`)}`);
+    console.log(c.dim(`  Each probe below is a live quote at that size. This takes a few seconds.`));
+    console.log();
+  }
 
   const result = await findCrossover(quoter, {
     symbol,
@@ -796,7 +801,7 @@ async function cmdCrossover(args: Map<string, string>): Promise<number> {
     steps: numArg(args, "steps") ?? 9,
   });
 
-  if (args.get("json") === "true") {
+  if (asJson) {
     console.log(JSON.stringify(result, null, 2));
     return 0;
   }

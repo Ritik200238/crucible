@@ -57,17 +57,24 @@ function best(routes: CostEstimate[]): CostEstimate | null {
 }
 
 function probeOf(usd: number, routes: CostEstimate[]): CrossoverProbe {
-  const winner = best(routes);
   const onchain = routes.find((r) => r.venue === "ONCHAIN" && !r.unavailable) ?? null;
   const binance = routes
     .filter((r) => r.venue === "BINANCE_SPOT" && !r.unavailable)
     .sort((a, b) => a.totalBps - b.totalBps)[0] ?? null;
+
+  // A winner only means something when both venues answered. One side going
+  // unpriceable at a size — a book too thin to fill it, a pool with no depth —
+  // leaves the other standing alone, and calling that "cheaper" would turn a
+  // missing quote into a comparison nobody made.
+  const comparable = onchain !== null && binance !== null;
+  const winner = comparable ? best([onchain!, binance!]) : null;
+
   return {
     usd,
     cheapest: winner ? label(winner) : null,
     onchainBps: onchain ? onchain.totalBps : null,
     binanceBps: binance ? binance.totalBps : null,
-    edgeBps: onchain && binance ? binance.totalBps - onchain.totalBps : null,
+    edgeBps: comparable ? binance!.totalBps - onchain!.totalBps : null,
   };
 }
 
@@ -108,7 +115,17 @@ export async function findCrossover(quote: Quoter, opts: CrossoverOptions): Prom
   };
 
   const low = await at(minUsd);
-  const high = await at(maxUsd);
+
+  // The top of the range is a guess, and a guess can be past what either venue
+  // will price: a book too thin to fill it, a pool with no depth at that size.
+  // Rather than reporting a range the market would not answer, walk the top
+  // down until both venues quote, and say afterwards which range was used.
+  let high = await at(maxUsd);
+  let ceiling = maxUsd;
+  for (let i = 0; i < 4 && high.cheapest === null && ceiling / 2 > minUsd * 2; i++) {
+    ceiling = Math.round(ceiling / 2);
+    high = await at(ceiling);
+  }
 
   const base = {
     symbol: opts.symbol,
@@ -119,11 +136,17 @@ export async function findCrossover(quote: Quoter, opts: CrossoverOptions): Prom
   };
 
   if (low.cheapest === null || high.cheapest === null) {
+    const end = low.cheapest === null ? low : high;
+    const missing = end.binanceBps === null ? "Binance" : "the pool";
+    const both = low.cheapest === null && high.cheapest === null;
     return {
       ...base, crossoverUsd: null, precision: 0,
       verdict:
-        `Neither end of the range could be priced on both venues, so there is nothing to compare. ` +
-        `The route that did answer is the only one available at that size.`,
+        (both
+          ? `Neither end of the range could be priced on both venues, so there is nothing to compare. `
+          : `At ${money(end.usd)}, ${missing} could not price this order, so there is nothing to compare at ` +
+            `that end and no crossover can be located. `) +
+        `A quote that only one venue answered is not a venue winning; try a narrower range with --max.`,
     };
   }
 
@@ -131,14 +154,17 @@ export async function findCrossover(quote: Quoter, opts: CrossoverOptions): Prom
     return {
       ...base, crossoverUsd: null, precision: 0,
       verdict:
-        `${low.cheapest} is cheaper at every size from ${money(minUsd)} to ${money(maxUsd)}, so there is no ` +
-        `crossover in that range. On this pair, right now, the venue does not change with size.`,
+        `${low.cheapest} is cheaper at every size from ${money(minUsd)} to ${money(ceiling)}, so there is no ` +
+        `crossover in that range. On this pair, right now, the venue does not change with size.` +
+        (ceiling < maxUsd
+          ? ` The top was brought down from ${money(maxUsd)} because nothing would price an order that large.`
+          : ""),
     };
   }
 
   // Both ends priced and they disagree, so a crossing exists between them.
   let lo = minUsd;
-  let hi = maxUsd;
+  let hi = ceiling;
   for (let i = 0; i < steps; i++) {
     const mid = Math.round(Math.sqrt(lo * hi)); // geometric: sizes span orders of magnitude
     if (mid <= lo || mid >= hi) break;
@@ -158,7 +184,10 @@ export async function findCrossover(quote: Quoter, opts: CrossoverOptions): Prom
     verdict:
       `${low.cheapest} is cheaper up to about ${money(crossoverUsd)}, and ${high.cheapest} above it. ` +
       `Pinned between ${money(lo)} and ${money(hi)} by ${probes.length} live quotes. This moves with the ` +
-      `book, the pool, the gas price and your own fee tier, so it is a reading, not a constant.`,
+      `book, the pool, the gas price and your own fee tier, so it is a reading, not a constant.` +
+      (ceiling < maxUsd
+        ? ` The range stops at ${money(ceiling)}: nothing would price an order as large as ${money(maxUsd)}.`
+        : ""),
   };
 }
 
