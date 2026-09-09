@@ -16,7 +16,14 @@
  *      and the ones that were refused.
  */
 
-import { assertExecutable, RouteError } from "../decide/router.ts";
+import { assertExecutable, measuredImpactBps, RouteError } from "../decide/router.ts";
+import {
+  cooldownAfterLoss,
+  dailyLossLimit,
+  maxDailyNotional,
+  maxOrdersPerHour,
+} from "../risk/rules.ts";
+import { deriveState, emptyState } from "../risk/state.ts";
 import { Ledger } from "../ledger/chain.ts";
 import { NATIVE_BNB, TOKENS } from "../venues/onchain.ts";
 import { fetchSymbolFilters, roundToStep } from "../venues/binance.ts";
@@ -35,7 +42,17 @@ import {
   WalletError,
   type SwapOrder,
 } from "./wallet.ts";
-import type { ConfirmedFill, Plan, Policy, Receipt, Side, Snapshot, Venue } from "../types.ts";
+import type {
+  AccountSnapshot,
+  ConfirmedFill,
+  Plan,
+  Policy,
+  Receipt,
+  RollingState,
+  Side,
+  Snapshot,
+  Venue,
+} from "../types.ts";
 
 export class ExecutionError extends Error {
   constructor(message: string) {
@@ -119,6 +136,13 @@ export interface ExecuteOptions {
    * a pipeline nobody dares run.
    */
   binance?: { baseUrl: string; credentials: Credentials; fetchImpl?: typeof fetch };
+  /**
+   * The account the cumulative caps are measured against, as it stands now.
+   *
+   * Required because the gates are re-run here rather than trusted from when
+   * the plan was made. See `assertStillClear`.
+   */
+  account: AccountSnapshot;
   ledger?: Ledger;
   now?: number;
 }
@@ -155,6 +179,80 @@ export function assertLive(policy: Policy): void {
  * in-memory guard is cleared by a restart, and "restart the process" is not a
  * difficulty for anything that would want to replay an order.
  */
+/**
+ * Re-run the risk engine against the state as it is now, not as it was.
+ *
+ * A plan clears the gates at the moment it is made, and then sits — up to a
+ * minute in the CLI, longer in an agent that routes several orders before
+ * executing any of them. The cumulative caps move underneath it: the daily
+ * volume, the orders-per-hour window and the loss circuit breaker all count
+ * executions that may have happened since. Two plans each routed against an
+ * empty day can therefore both pass and jointly breach the day's limit.
+ *
+ * So those rules are taken again here, against a fresh read of the ledger, and
+ * a plan that has become blocked does not go.
+ *
+ * Only those rules. The market-shape rules — impact, depth, spread — were
+ * already answered when the plan was made, and answered by the routing itself:
+ * an order too large to take in one piece is why a plan comes back sliced.
+ * Re-running them against the whole quantity here would re-derive the very
+ * block that slicing exists to solve, and would refuse every sliced plan. The
+ * snapshot those rules read is pinned by the fingerprint and the plan expires
+ * in a minute, so they cannot go stale in the window this guards.
+ */
+/**
+ * The rules whose answer depends on what has happened, not on the order.
+ *
+ * These four read the rolling counters, so their verdict can change while a
+ * plan waits. Every other rule reads the order, the snapshot or the account,
+ * all of which the plan already fixed.
+ */
+const CUMULATIVE_RULES = [maxDailyNotional, maxOrdersPerHour, cooldownAfterLoss, dailyLossLimit];
+
+export function assertStillClear(opts: ExecuteOptions, ledger: Ledger, now: number): void {
+  const { plan, snapshot, policy, account } = opts;
+
+  let state: RollingState;
+  try {
+    state = deriveState(ledger.read(), now);
+  } catch {
+    // An unreadable ledger yields no counters, which makes every cap apply in
+    // full rather than reading as already spent. That is the safe direction,
+    // and it is what `emptyState` gives.
+    state = emptyState();
+  }
+
+  const order = {
+    symbol: snapshot.symbol,
+    side: plan.intent.side,
+    type: "MARKET" as const,
+    market: "SPOT" as const,
+    quantity: plan.baseQty,
+    venue: plan.chosen.venue,
+  };
+  const ctx = {
+    policy,
+    account,
+    state,
+    markPrice: snapshot.mid,
+    now: new Date(now),
+    snapshot,
+    impactBps: measuredImpactBps(snapshot, plan.intent.side, plan.baseQty),
+  };
+
+  const blocked = CUMULATIVE_RULES.map((rule) => rule.evaluate(order, ctx)).filter(
+    (r) => r !== null && r.verdict === "BLOCK",
+  );
+  if (blocked.length === 0) return;
+
+  throw new ExecutionError(
+    `Plan ${plan.id} cleared when it was made, but no longer does: ` +
+      `${blocked.map((r) => r!.rule).join(", ")}. ` +
+      blocked.map((r) => r!.message).join(" ") +
+      ` These caps count what has executed since this plan was priced. Take a fresh quote.`,
+  );
+}
+
 export function assertSpendable(plan: Plan, ledger: Ledger): void {
   let seen = false;
   try {
@@ -462,6 +560,7 @@ export async function execute(opts: ExecuteOptions): Promise<Receipt> {
   try {
     assertExecutable(plan, now);
     assertSpendable(plan, ledger);
+    assertStillClear(opts, ledger, now);
     assertLive(policy);
   } catch (err) {
     record("execution.refused", {

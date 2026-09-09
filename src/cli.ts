@@ -36,6 +36,7 @@ import { findCrossover, liveQuoter } from "./analysis/crossover.ts";
 import { ALL_RULES } from "./risk/rules.ts";
 import { evaluate } from "./risk/engine.ts";
 import type {
+  AccountSnapshot,
   CostEstimate,
   Decision,
   Plan,
@@ -292,6 +293,7 @@ async function runExecution(
   snapshot: Snapshot,
   policy: Policy,
   verdict: Decision["verdict"],
+  account: AccountSnapshot,
 ): Promise<number> {
   console.log();
   if (verdict === "BLOCK") {
@@ -321,7 +323,7 @@ async function runExecution(
   }
 
   try {
-    const receipt = await execute({ plan, snapshot, policy, ...(binance ? { binance } : {}) });
+    const receipt = await execute({ plan, snapshot, policy, account, ...(binance ? { binance } : {}) });
 
     console.log(`  ${c.bold("RECEIPT")} ${receipt.planId}   ${c.dim(receipt.fingerprint)}`);
     console.log(
@@ -415,7 +417,12 @@ async function cmdRoute(args: Map<string, string>): Promise<number> {
   console.log();
 
   if (args.get("execute") === "true") {
-    return runExecution(plan, snapshot, policy, decision.verdict);
+    return runExecution(plan, snapshot, policy, decision.verdict, {
+      equityUsd: equity.equityUsd,
+      positions: [],
+      realisedPnlTodayUsd: 0,
+      source: equity.source,
+    });
   }
 
   const badge =

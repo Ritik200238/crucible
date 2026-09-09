@@ -368,6 +368,10 @@ export function buildServer(opts: BuildOptions): McpServer {
           plan: held.plan,
           snapshot: held.snapshot,
           policy,
+          // Read again rather than carried from `route`: the gates are re-run
+          // in `execute` against the state as it is now, and an account figure
+          // frozen at routing time would defeat half of that.
+          account: await resolveEquity(undefined),
           binance,
           ledger: new Ledger(),
         });

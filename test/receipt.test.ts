@@ -16,6 +16,19 @@ import type {
   Snapshot,
 } from "../src/types.ts";
 
+/**
+ * The account the caps are measured against in these tests.
+ *
+ * Large enough that the equity-relative rules never fire, so a test that means
+ * to exercise a cumulative cap is not quietly stopped by a concentration rule.
+ */
+const TEST_ACCOUNT = {
+  equityUsd: 1_000_000,
+  positions: [],
+  realisedPnlTodayUsd: 0,
+  source: "simulated" as const,
+};
+
 // BNBUSDT at a mid of 752, so every basis point below is worth 0.0752 of a
 // dollar per BNB and the expected numbers can be checked by hand.
 const MID = 752;
@@ -433,6 +446,7 @@ test("execute refuses a dry-run policy, records it, and sends nothing", async ()
             plan: p,
             snapshot: snapshot(),
             policy: DRY_RUN,
+            account: TEST_ACCOUNT,
             ledger,
             now: p.createdAt,
           }),
@@ -473,6 +487,7 @@ test("execute refuses an expired plan before it looks at the live switch", async
             plan: p,
             snapshot: snapshot(),
             policy: LIVE,
+            account: TEST_ACCOUNT,
             ledger,
             now: p.expiresAt + 90_000,
           }),
@@ -510,6 +525,7 @@ test("execute checks expiry before the policy mode", async () => {
           plan: p,
           snapshot: snapshot(),
           policy: DRY_RUN,
+          account: TEST_ACCOUNT,
           ledger,
           now: p.expiresAt + 1,
         }),

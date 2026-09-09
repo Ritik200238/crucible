@@ -414,6 +414,19 @@ function ledgerIn(name: string): Ledger {
 }
 
 /** One execution, wired to its own ledger and its own venue. */
+/**
+ * The account the caps are measured against in these tests.
+ *
+ * Large enough that the equity-relative rules never fire, so a test that means
+ * to exercise a cumulative cap is not quietly stopped by a concentration rule.
+ */
+const TEST_ACCOUNT = {
+  equityUsd: 1_000_000,
+  positions: [],
+  realisedPnlTodayUsd: 0,
+  source: "simulated" as const,
+};
+
 function pipeline(
   name: string,
   venue: SimulatedVenue,
@@ -421,6 +434,7 @@ function pipeline(
   plan: Plan,
   snapshot: Snapshot = DEEP,
   now: number = TAKEN_AT,
+  opts?: { account?: typeof TEST_ACCOUNT },
 ) {
   const ledger = ledgerIn(name);
   return {
@@ -430,6 +444,7 @@ function pipeline(
         plan,
         snapshot,
         policy,
+        account: opts?.account ?? TEST_ACCOUNT,
         ledger,
         now,
         binance: { baseUrl: VENUE_URL, credentials: CREDENTIALS, fetchImpl: venue.fetchImpl },
@@ -829,6 +844,60 @@ test("an order whose reply is lost is unresolved, and is found again by the id w
 
   // Once resolved it stops holding a cap.
   assert.equal(deriveState(ledger.read(), TAKEN_AT).unresolved.length, 0);
+});
+
+test("a plan that cleared its caps when it was made is refused once they are spent", async () => {
+  // Two plans, each priced against a day with nothing on it, so each clears the
+  // daily cap on its own. Together they are over it. Nothing re-checks between
+  // routing and sending unless execution does, and this is what that catches.
+  process.env.CRUCIBLE_LIVE = "1";
+  // Two different orders, because one intent priced twice is one plan: the
+  // fingerprint is the authorisation, and re-routing the same thing returns it.
+  const firstIntent: Intent = { symbol: "BNBUSDT", side: "BUY", baseQty: 2 };
+  const secondIntent: Intent = { symbol: "BNBUSDT", side: "BUY", baseQty: 1.5 };
+  const notional = firstIntent.baseQty * DEEP.mid;
+  const policy: Policy = { ...LIVE_POLICY, maxDailyNotionalUsd: notional * 1.5 };
+
+  const first = route({ intent: firstIntent, snapshot: DEEP, policy });
+  const second = route({ intent: secondIntent, snapshot: DEEP, policy });
+  assert.notEqual(first.id, second.id, "two orders must be two plans");
+
+  const ledger = ledgerIn("caps-spent");
+  const venue = simulatedVenue();
+  const send = (plan: Plan) =>
+    execute({
+      plan,
+      snapshot: DEEP,
+      policy,
+      account: TEST_ACCOUNT,
+      ledger,
+      now: TAKEN_AT,
+      binance: { baseUrl: VENUE_URL, credentials: CREDENTIALS, fetchImpl: venue.fetchImpl },
+    });
+
+  // The first spends most of the day's allowance and goes through.
+  const receipt = await send(first);
+  assert.equal(receipt.fills.length, 1);
+  // Counted at the price it actually filled at, which is near the mid but not
+  // it, so this is a band rather than an equality.
+  const spent = deriveState(ledger.read(), TAKEN_AT).notionalTodayUsd;
+  assert.ok(
+    Math.abs(spent - notional) / notional < 0.01,
+    `expected about ${notional} traded, got ${spent}`,
+  );
+
+  // The second was cleared against a day that no longer exists.
+  await assert.rejects(send(second), (err: unknown) => {
+    assert.ok(err instanceof ExecutionError, `expected a refusal, got ${String(err)}`);
+    assert.match(err.message, /cleared when it was made, but no longer does/);
+    assert.match(err.message, /max_daily_notional/);
+    return true;
+  });
+
+  // Refused, not sent: the venue saw one order, not two.
+  assert.equal(venue.placed.length, 1);
+  const kinds = ledger.read().map((r) => r.kind);
+  assert.equal(kinds.at(-1), "execution.refused");
 });
 
 test("a rejected order is recorded verbatim and leaves the chain intact", async () => {
