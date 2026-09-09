@@ -70,7 +70,7 @@ const q100k = lines("q100k.txt", (l) => /CRUCIBLE|BUY |mid |[●○] |Cheapest:/
 const q1k = lines("q1k.txt", (l) => /CRUCIBLE|BUY |mid |[●○] |Cheapest:/.test(l)).join("\n");
 const refusal = read("refusal.txt").trim();
 const calibration = read("calibration.txt").trim();
-const attack = lines("attack.txt", (l) => /^\s+\d\.\s|STOPPED|All 9 attacks/.test(l))
+const attack = lines("attack.txt", (l) => /^\s+\d+\.\s|STOPPED|All 19 attacks/.test(l))
   .map((l) => l.replace(/STOPPED.*$/, "STOPPED"))
   .join("\n");
 // The replacement lists every fill; the point is the refusal and that a true
@@ -149,9 +149,9 @@ const SLIDES: Slide[] = [
   },
   {
     kicker: "Attacked",
-    headline: ["Nine attacks.", "All stopped.", "Re-run in CI."],
+    headline: ["Nineteen attacks.", "All stopped.", "Re-run in CI."],
     sub: "Order splitting, replay, a poisoned pool, a negative book level, an order cut off before the read-back. Each worked once.",
-    narration: "It was attacked, not just tested: order splitting, replay, a poisoned pool, an order cut off mid-flight. Nine attacks, all stopped, re-run in CI on every push.",
+    narration: "It was attacked, not just tested: order splitting, replay, a poisoned pool, an order whose reply was lost while the order stayed live. Nineteen attacks, all stopped, re-run in CI on every push.",
     visual: { kind: "terminal", title: "node demo/attack.ts", text: attack },
   },
   {

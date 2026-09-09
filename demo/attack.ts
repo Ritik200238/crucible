@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Sixteen ways to get money out of this thing, run against the real code.
+ * Nineteen ways to get money out of this thing, run against the real code.
  *
  * Every defence here exists because the attack it stops used to work. None of
  * them came from reading the code and imagining what might go wrong: each one
  * came from sitting on the attacker's side and trying to get an order through
- * that should not have got through. Three of these moved real money to the
- * wrong place before they were fixed.
+ * that should not have got through. Five of these could have moved real money
+ * to the wrong place before they were fixed.
  *
  * This runs the actual modules — the same policy engine, the same book walker,
  * the same ledger the product uses — and reports whether each attack still
@@ -22,7 +22,7 @@ import { join } from "node:path";
 
 import { Ledger } from "../src/ledger/chain.ts";
 import { verifyLedger } from "../src/ledger/verify.ts";
-import { assertSpendable } from "../src/exec/execute.ts";
+import { assertSpendable, assertStillClear, execute, UnconfirmedError } from "../src/exec/execute.ts";
 import { deriveState, emptyState } from "../src/risk/state.ts";
 import { evaluate } from "../src/risk/engine.ts";
 import { assertUsableBook, walkBook } from "../src/snapshot.ts";
@@ -159,6 +159,21 @@ function snapshotWithPool(poolPrice: number): Snapshot {
     hash: "attack-fixture",
   };
 }
+
+/**
+ * A snapshot and a plan for the two execution attacks below.
+ *
+ * Both of those attacks are about what happens between the decision and the
+ * order, so the market they run against only has to be ordinary. It is the
+ * same routing the product uses, on a book that clears every gate.
+ */
+const ATTACK_SNAPSHOT: Snapshot = snapshotWithPool(727.27);
+const attackPlan = (): Plan =>
+  route({
+    intent: { symbol: "BNBUSDT", side: "BUY", baseQty: 2 },
+    snapshot: ATTACK_SNAPSHOT,
+    policy: { ...DEFAULT_POLICY, mode: "live", venueAllowlist: ["BINANCE_SPOT"] },
+  });
 
 interface Attack {
   /** What an attacker is trying to achieve, in their words. */
@@ -508,6 +523,95 @@ const attacks: Attack[] = [
     },
   },
   {
+    goal: "Get a live order retried by killing the reply, not the order",
+    why: "The order was only written down after the exchange answered. A reply lost in transit therefore left nothing on the record, the run was classified as a plain failure — the one class whose own comment says it can be retried — and retrying it doubles a position that is already on the book.",
+    run: async () => {
+      const ledger = tempLedger();
+      const plan = attackPlan();
+      // A venue that takes the order and then drops the response. Validation
+      // passes, the order is real, and this side never hears the order id.
+      const fetchImpl: typeof fetch = async (input, init) => {
+        const url = new URL(typeof input === "string" ? input : (input as Request).url);
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (url.pathname === "/api/v3/time") {
+          return new Response(JSON.stringify({ serverTime: Date.now() }), { status: 200 });
+        }
+        if (url.pathname === "/api/v3/order/test") return new Response("{}", { status: 200 });
+        if (url.pathname === "/api/v3/order" && method === "POST") throw new TypeError("fetch failed");
+        return new Response(JSON.stringify({ code: -1121, msg: "no route" }), { status: 404 });
+      };
+
+      // The venue is a fixture on an unroutable host, so this reaches nothing
+      // real. The switch has to be on or the transmit gate refuses first and
+      // the attack would never get as far as the thing it is testing.
+      const wasLive = process.env.CRUCIBLE_LIVE;
+      process.env.CRUCIBLE_LIVE = "1";
+      try {
+        await execute({
+          plan,
+          snapshot: ATTACK_SNAPSHOT,
+          policy: { ...DEFAULT_POLICY, mode: "live", venueAllowlist: ["BINANCE_SPOT"] },
+          account: { equityUsd: 10_000_000, positions: [], realisedPnlTodayUsd: 0, source: "simulated" },
+          ledger,
+          now: plan.createdAt,
+          binance: {
+            baseUrl: "https://venue.invalid",
+            credentials: { apiKey: "k", secret: "s", scheme: "HMAC" },
+            fetchImpl,
+          },
+        });
+        return null;
+      } catch (err) {
+        // Anything other than "unresolved" is the attack landing: a live order
+        // described as a failure is a live order somebody will retry.
+        if (!(err instanceof UnconfirmedError)) return null;
+        const written = ledger.read().find((r) => r.kind === "execution.submitted");
+        const clientOrderId = (written?.payload as { clientOrderId?: string })?.clientOrderId;
+        if (!clientOrderId) return null;
+        return `held as unresolved, not failed, and still findable by ${clientOrderId} — the id chosen before the send`;
+      } finally {
+        if (wasLive === undefined) delete process.env.CRUCIBLE_LIVE;
+        else process.env.CRUCIBLE_LIVE = wasLive;
+      }
+    },
+  },
+  {
+    goal: "Break a daily cap with two orders that each cleared it, by pricing both before sending either",
+    why: "The gates ran when a plan was made and never again. Two plans routed against a day with nothing on it both passed, and nothing looked at the counters between the decision and the order.",
+    run: async () => {
+      const policy: Policy = {
+        ...DEFAULT_POLICY,
+        mode: "live",
+        venueAllowlist: ["BINANCE_SPOT"],
+        maxDailyNotionalUsd: 2_000,
+      };
+      const ledger = tempLedger();
+      // A day that already spent most of the allowance, on the record.
+      ledger.append("execution.completed", {
+        planId: "earlier",
+        symbol: "BNBUSDT",
+        side: "BUY",
+        fills: [fill({ reference: "earlier", filledQuoteQty: 1_800 })],
+      });
+
+      try {
+        assertStillClear(
+          {
+            plan: attackPlan(),
+            snapshot: ATTACK_SNAPSHOT,
+            policy,
+            account: { equityUsd: 10_000_000, positions: [], realisedPnlTodayUsd: 0, source: "simulated" },
+          },
+          ledger,
+          Date.now(),
+        );
+        return null;
+      } catch (err) {
+        return `refused at execution — ${(err as Error).message.split(".")[0]}`;
+      }
+    },
+  },
+  {
     goal: "Walk a mis-sorted book so the order prices against levels in the wrong sequence",
     why: "Out-of-order levels still walk. The result overstates or understates every cost depending on which way the sort broke.",
     run: () => {
@@ -531,7 +635,7 @@ const attacks: Attack[] = [
 
 console.log();
 console.log(`  ${bold("Attacks against Crucible, run against the real modules.")}`);
-console.log(`  ${dim("Each of these worked once. Three of them moved money to the wrong place.")}`);
+console.log(`  ${dim("Each of these worked once. Five of them could have moved money to the wrong place.")}`);
 
 let broken = 0;
 for (const [i, attack] of attacks.entries()) {

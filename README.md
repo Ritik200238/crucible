@@ -20,7 +20,7 @@ What that has produced so far — every figure checkable in this repository:
   own MCP server — fees at your account's rate, and the risk caps sized to your
   actual balance, not a public schedule and a guessed number
 - **17 bugs found by attacking it**, three of which could have moved money to
-  the wrong place — all seventeen re-run as attacks in CI on every push
+  the wrong place — all nineteen re-run as attacks in CI on every push
 - **500 tests**, none of which need a network
 - The maker fill model **graded against the real tape** — and found ~15 bps
   optimistic on deep queues, reported with the number rather than hidden
@@ -116,23 +116,23 @@ Measured, not asserted. Regenerate any of it with `npm run evidence`.
 
 | Pair | Order size | Samples | On-chain cheaper | Median on-chain | Median Binance | Median edge |
 |---|---|---|---|---|---|---|
-| BNBUSDT | $100 | 42 | 100% | 1.46 bps | 10.07 bps | 8.63 bps |
-| BNBUSDT | $1,000 | 42 | 100% | 1.09 bps | 10.07 bps | 8.94 bps |
-| BNBUSDT | $10,000 | 42 | 100% | 1.95 bps | 10.07 bps | 8.12 bps |
-| BNBUSDT | $100,000 | 42 | 67% | 11.03 bps | 11.81 bps | 0.47 bps |
-| BTCUSDT | $100 | 42 | 0% | 51.70 bps | 10.00 bps | -41.70 bps |
-| BTCUSDT | $1,000 | 42 | 0% | 53.40 bps | 10.00 bps | -43.40 bps |
-| BTCUSDT | $10,000 | 42 | 0% | 56.28 bps | 10.00 bps | -46.28 bps |
-| BTCUSDT | $100,000 | 42 | 0% | 65.56 bps | 10.00 bps | -55.54 bps |
-| ETHUSDT | $100 | 42 | 100% | 2.15 bps | 10.02 bps | 7.85 bps |
-| ETHUSDT | $1,000 | 42 | 100% | 3.02 bps | 10.02 bps | 6.95 bps |
-| ETHUSDT | $10,000 | 42 | 43% | 11.08 bps | 10.02 bps | -1.02 bps |
-| ETHUSDT | $100,000 | 42 | 0% | 64.35 bps | 10.21 bps | -54.04 bps |
-| XRPUSDT | $100 | 42 | 0% | 81.52 bps | 10.18 bps | -71.34 bps |
-| XRPUSDT | $1,000 | 42 | 0% | 82.74 bps | 10.22 bps | -72.62 bps |
-| XRPUSDT | $10,000 | 42 | 0% | 111.82 bps | 10.23 bps | -101.56 bps |
+| BNBUSDT | $100 | 44 | 100% | 1.49 bps | 10.07 bps | 8.60 bps |
+| BNBUSDT | $1,000 | 44 | 100% | 1.13 bps | 10.07 bps | 8.92 bps |
+| BNBUSDT | $10,000 | 44 | 100% | 1.95 bps | 10.07 bps | 8.12 bps |
+| BNBUSDT | $100,000 | 44 | 68% | 11.03 bps | 11.76 bps | 0.47 bps |
+| BTCUSDT | $100 | 44 | 0% | 51.70 bps | 10.00 bps | -41.70 bps |
+| BTCUSDT | $1,000 | 44 | 0% | 53.40 bps | 10.00 bps | -43.40 bps |
+| BTCUSDT | $10,000 | 44 | 0% | 56.28 bps | 10.00 bps | -46.28 bps |
+| BTCUSDT | $100,000 | 44 | 0% | 65.56 bps | 10.00 bps | -55.54 bps |
+| ETHUSDT | $100 | 44 | 100% | 2.15 bps | 10.02 bps | 7.85 bps |
+| ETHUSDT | $1,000 | 44 | 100% | 3.02 bps | 10.02 bps | 6.95 bps |
+| ETHUSDT | $10,000 | 44 | 43% | 10.85 bps | 10.02 bps | -0.80 bps |
+| ETHUSDT | $100,000 | 44 | 0% | 64.35 bps | 10.21 bps | -54.04 bps |
+| XRPUSDT | $100 | 44 | 0% | 81.52 bps | 10.17 bps | -71.34 bps |
+| XRPUSDT | $1,000 | 44 | 0% | 82.74 bps | 10.20 bps | -72.62 bps |
+| XRPUSDT | $10,000 | 44 | 0% | 111.82 bps | 10.22 bps | -101.56 bps |
 
-Measured across 630 samples spanning 6.8 hours. On-chain was cheaper in 41% of them.
+Measured across 660 samples spanning 7.1 hours. On-chain was cheaper in 41% of them.
 <!-- EVIDENCE:END -->
 
 **The cheaper venue changes with size, and the crossover is different for each
@@ -174,11 +174,11 @@ node --experimental-strip-types src/cli.ts calibration                          
 Two scripts show the parts a terminal transcript hides:
 
 ```bash
-node --experimental-strip-types demo/attack.ts          # eight attacks, run for real
+node --experimental-strip-types demo/attack.ts          # nineteen attacks, run for real
 node --experimental-strip-types demo/agent-session.ts   # the same product, driven over MCP
 ```
 
-`demo/attack.ts` exits non-zero if any of the seventeen attacks succeeds, and CI runs it.
+`demo/attack.ts` exits non-zero if any of the nineteen attacks succeeds, and CI runs it.
 
 There is also a dashboard, if you would rather see a cost breakdown than read
 one:
