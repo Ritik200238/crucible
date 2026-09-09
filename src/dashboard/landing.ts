@@ -192,6 +192,18 @@ footer .spacer { flex: 1; }
     <h2>The cheaper venue changes with size, and the crossover is different for every pair.</h2>
     <p class="intro">Measured, not asserted. Each row is a live comparison of the same order on both venues at one instant, sampled repeatedly. The gap on the small orders is almost all commission; it reverses where the pool's impact overtakes the exchange's fee. On two of the four pairs on-chain never wins at any size, because a 50 bp wallet fee lands on the swap &mdash; which is the case for routing per order rather than picking a venue and living with it.</p>
     <div class="card"><div class="body scroll" id="evidence-body"><span class="pending">reading the samples</span></div></div>
+
+    <h3 style="margin:42px 0 10px;font-size:19px;font-weight:700;letter-spacing:-0.015em">Those are four fixed sizes. The flip is somewhere between them.</h3>
+    <p class="intro" style="margin-bottom:20px"><code>crucible crossover</code> bisects the live cost curves to find where it actually is &mdash; each row below a real quote at a real size, taken in sequence until the answer is pinned. Run it three times in an afternoon and it reads $104k, then $93k, then $90k. That is the point rather than a defect: the flip moves with the book, the pool, the gas price and your own fee tier. There is nowhere to look this number up.</p>
+    <pre class="cmd" style="max-width:640px"><span class="c"># BNBUSDT BUY, twelve live quotes</span>
+       $100.00   binance    7.57   on-chain    1.67    on-chain
+    $35,355.00   binance    9.62   on-chain    4.77    on-chain
+    $88,440.00   binance   10.77   on-chain   10.29    on-chain
+    $94,015.00   binance   10.86   on-chain   10.86    Binance spot maker
+   $250,000.00   binance   13.41   on-chain   31.32    Binance spot maker
+
+crossover  $93,302 &plusmn; 2%</pre>
+    <p class="intro" style="margin:20px 0 0">Two things it refuses to do. On BTC/USDT it stops after two quotes and reports no crossover, rather than bisecting a curve that never crosses. And when one venue cannot price an order at all, the lone answer is not called a winner &mdash; the top of the range walks down until both venues quote, and the range actually used is stated.</p>
   </div>
 </section>
 
